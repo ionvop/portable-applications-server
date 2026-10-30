@@ -1,27 +1,13 @@
 import { useEffect, useMemo, useState } from "react"
 import { ApiError, browse } from "../api/client"
 import type { BrowseResult } from "../types"
+import { joinPath, pathSegments } from "../lib/paths"
 import {
   ChevronRightIcon,
   FileIcon,
   FolderIcon,
   SearchIcon,
 } from "../components/icons"
-
-/** Join a relative browse path with a child directory name. */
-function joinPath(base: string, name: string): string {
-  return base ? `${base}/${name}` : name
-}
-
-/** Cumulative path segments for the breadcrumb, e.g. "A/B" → ["A", "A/B"]. */
-function pathSegments(path: string): { label: string; path: string }[] {
-  if (!path) return []
-  const parts = path.split("/").filter(Boolean)
-  return parts.map((label, index) => ({
-    label,
-    path: parts.slice(0, index + 1).join("/"),
-  }))
-}
 
 export function FilesView() {
   const [path, setPath] = useState("")
