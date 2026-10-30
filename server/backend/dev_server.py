@@ -1,8 +1,8 @@
 """Headless API server for frontend development.
 
-Runs the Flask API on ``config.HOST:config.PORT`` without opening a PyWebView
-window and without requiring a built frontend. Vite serves the UI on port 5173
-and proxies ``/api`` here (see ``vite.config.ts``).
+Runs the Flask API on ``config.BIND_HOST:config.PORT`` without opening a
+PyWebView window and without requiring a built frontend. Vite serves the UI on
+port 5173 and proxies ``/api`` here (see ``vite.config.ts``).
 
 Usage::
 
@@ -21,16 +21,18 @@ if __package__ in (None, ""):
 
 from . import config, db
 from .app import create_app
-from .services import archive_service
+from .services import archive_service, network_service
 
 
 def main() -> int:
     db.init_db()
     archive_service.sweep_stale_archives()
 
-    print(f"API listening on http://{config.HOST}:{config.PORT} (Ctrl+C to stop)")
+    lan_ip = network_service.get_lan_ip()
+    print(f"API listening on http://{config.UI_HOST}:{config.PORT} (Ctrl+C to stop)")
+    print(f"Client catalog: http://{lan_ip}:{config.PORT}/client")
     create_app().run(
-        host=config.HOST,
+        host=config.BIND_HOST,
         port=config.PORT,
         threaded=True,
         use_reloader=False,
