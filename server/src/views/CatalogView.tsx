@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react"
+import { ApiError, deleteEntry } from "../api/client"
 import type { CatalogEntry } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
+import { ConfirmDialog } from "../components/ConfirmDialog"
 import {
   GridIcon,
   ListIcon,
@@ -12,14 +14,47 @@ import {
 interface CatalogViewProps {
   entries: CatalogEntry[]
   onOpenEntry: (entry: CatalogEntry) => void
+  onCreate: () => void
+  onDeleted: (id: number) => void
 }
 
 type Layout = "grid" | "table"
 
-export function CatalogView({ entries, onOpenEntry }: CatalogViewProps) {
+export function CatalogView({
+  entries,
+  onOpenEntry,
+  onCreate,
+  onDeleted,
+}: CatalogViewProps) {
   const [layout, setLayout] = useState<Layout>("grid")
   const [query, setQuery] = useState("")
   const [sort, setSort] = useState("title")
+
+  const [pendingDelete, setPendingDelete] = useState<CatalogEntry | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || deleting) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteEntry(pendingDelete.id)
+      const id = pendingDelete.id
+      setPendingDelete(null)
+      onDeleted(id)
+    } catch (cause: unknown) {
+      setDeleteError(
+        cause instanceof ApiError
+          ? cause.message
+          : cause instanceof Error
+            ? cause.message
+            : "Unable to delete this entry.",
+      )
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
@@ -82,7 +117,11 @@ export function CatalogView({ entries, onOpenEntry }: CatalogViewProps) {
           </button>
         </div>
 
-        <button type="button" className="btn btn-sm btn-primary gap-2">
+        <button
+          type="button"
+          className="btn btn-sm btn-primary gap-2"
+          onClick={onCreate}
+        >
           <PlusIcon width={16} height={16} />
           Add entry
         </button>
@@ -107,28 +146,43 @@ export function CatalogView({ entries, onOpenEntry }: CatalogViewProps) {
       ) : layout === "grid" ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((entry) => (
-            <button
+            <div
               key={entry.id}
-              type="button"
-              className="card border border-base-300 bg-base-200 text-left transition-colors hover:border-primary/60"
-              onClick={() => onOpenEntry(entry)}
+              className="card relative border border-base-300 bg-base-200 transition-colors hover:border-primary/60"
             >
-              <Thumbnail entry={entry} className="h-32 w-full" />
-              <div className="card-body gap-2 p-4">
-                <h3 className="card-title text-sm">{entry.title}</h3>
-                <p className="line-clamp-2 text-xs text-base-content/60">
-                  {entry.description}
-                </p>
-                <div className="mt-1 flex items-center justify-between gap-2">
-                  <span className="badge badge-ghost badge-sm font-mono">
-                    {entry.directory}
-                  </span>
-                  <span className="text-xs text-base-content/40">
-                    {entry.updated_at?.slice(0, 10) ?? "—"}
-                  </span>
+              <button
+                type="button"
+                className="text-left"
+                onClick={() => onOpenEntry(entry)}
+              >
+                <Thumbnail entry={entry} className="h-32 w-full" />
+                <div className="card-body gap-2 p-4">
+                  <h3 className="card-title text-sm">{entry.title}</h3>
+                  <p className="line-clamp-2 text-xs text-base-content/60">
+                    {entry.description}
+                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <span className="badge badge-ghost badge-sm font-mono">
+                      {entry.directory}
+                    </span>
+                    <span className="text-xs text-base-content/40">
+                      {entry.updated_at?.slice(0, 10) ?? "—"}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs absolute top-2 right-2 bg-base-100/80"
+                aria-label={`Remove ${entry.title}`}
+                onClick={() => {
+                  setDeleteError(null)
+                  setPendingDelete(entry)
+                }}
+              >
+                <TrashIcon width={14} height={14} />
+              </button>
+            </div>
           ))}
         </div>
       ) : (
@@ -169,6 +223,10 @@ export function CatalogView({ entries, onOpenEntry }: CatalogViewProps) {
                       type="button"
                       className="btn btn-ghost btn-xs"
                       aria-label={`Remove ${entry.title}`}
+                      onClick={() => {
+                        setDeleteError(null)
+                        setPendingDelete(entry)
+                      }}
                     >
                       <TrashIcon width={14} height={14} />
                     </button>
@@ -179,6 +237,21 @@ export function CatalogView({ entries, onOpenEntry }: CatalogViewProps) {
           </table>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete catalog entry"
+        message={`Remove “${pendingDelete?.title ?? ""}” from the catalog? The application files on disk are not deleted.`}
+        confirmLabel="Delete entry"
+        busy={deleting}
+        error={deleteError}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => {
+          if (deleting) return
+          setPendingDelete(null)
+          setDeleteError(null)
+        }}
+      />
     </div>
   )
 }
