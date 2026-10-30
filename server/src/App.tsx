@@ -37,6 +37,7 @@ const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
 function App() {
   const [view, setView] = useState<ViewId>("dashboard")
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [entries, setEntries] = useState<CatalogEntry[]>([])
@@ -74,16 +75,58 @@ function App() {
     return () => controller.abort()
   }, [load])
 
+  /** Re-read the catalog without touching the global loading/error banner. */
+  const refreshEntries = useCallback(async () => {
+    try {
+      const catalog = await listEntries()
+      setEntries(catalog)
+      setSelectedEntry((current) =>
+        current ? (catalog.find((item) => item.id === current.id) ?? null) : null,
+      )
+    } catch (cause: unknown) {
+      setError(
+        cause instanceof ApiError
+          ? `${cause.status}: ${cause.message}`
+          : cause instanceof Error
+            ? cause.message
+            : "Unable to reach the server.",
+      )
+    }
+  }, [])
+
   const navigate = (next: ViewId) => {
     if (next !== "entry") {
       setSelectedEntry(null)
+      setIsCreating(false)
     }
     setView(next)
   }
 
   const openEntry = (entry: CatalogEntry) => {
+    setIsCreating(false)
     setSelectedEntry(entry)
     setView("entry")
+  }
+
+  const openCreate = () => {
+    setSelectedEntry(null)
+    setIsCreating(true)
+    setView("entry")
+  }
+
+  const handleSaved = (entry: CatalogEntry) => {
+    setSelectedEntry(entry)
+    setIsCreating(false)
+    setView("catalog")
+    void refreshEntries()
+  }
+
+  const handleDeleted = (id: number) => {
+    setEntries((current) => current.filter((item) => item.id !== id))
+    setSelectedEntry(null)
+    setIsCreating(false)
+    setView("catalog")
+    void refreshEntries()
   }
 
   const meta = pageMeta[view]
@@ -131,13 +174,22 @@ function App() {
           )}
 
           {view === "catalog" && (
-            <CatalogView entries={entries} onOpenEntry={openEntry} />
+            <CatalogView
+              entries={entries}
+              onOpenEntry={openEntry}
+              onCreate={openCreate}
+              onDeleted={handleDeleted}
+            />
           )}
 
-          {view === "entry" && selectedEntry && (
+          {view === "entry" && (selectedEntry || isCreating) && (
             <EntryDetailView
+              key={selectedEntry ? `entry-${selectedEntry.id}` : "entry-new"}
               entry={selectedEntry}
               onBack={() => navigate("catalog")}
+              onSaved={handleSaved}
+              onDeleted={handleDeleted}
+              onRefresh={refreshEntries}
             />
           )}
 
