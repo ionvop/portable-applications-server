@@ -24,14 +24,22 @@ function initials(title: string) {
 interface ThumbnailProps {
   entry: CatalogEntry
   className?: string
+  /** Explicit image URL, e.g. a local object URL for an unsaved upload. */
+  srcOverride?: string | null
 }
 
-export function Thumbnail({ entry, className = "" }: ThumbnailProps) {
-  const [failed, setFailed] = useState(false)
+export function Thumbnail({
+  entry,
+  className = "",
+  srcOverride,
+}: ThumbnailProps) {
+  // Remember which URL failed so a newly picked image gets a fresh attempt.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const gradient = gradients[entry.id % gradients.length]
-  const src = entry.thumbnail ? thumbnailUrl(entry.thumbnail) : ""
+  const src =
+    srcOverride ?? (entry.thumbnail ? thumbnailUrl(entry.thumbnail) : "")
 
-  if (src && !failed) {
+  if (src && failedSrc !== src) {
     return (
       <div className={`overflow-hidden ${className}`}>
         <img
@@ -39,7 +47,7 @@ export function Thumbnail({ entry, className = "" }: ThumbnailProps) {
           alt={entry.title}
           loading="lazy"
           className="size-full object-cover"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
         />
       </div>
     )
