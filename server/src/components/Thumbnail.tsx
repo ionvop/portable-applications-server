@@ -1,3 +1,5 @@
+import { useState } from "react"
+import { thumbnailUrl } from "../api/client"
 import type { CatalogEntry } from "../types"
 
 const gradients = [
@@ -25,10 +27,27 @@ interface ThumbnailProps {
 }
 
 export function Thumbnail({ entry, className = "" }: ThumbnailProps) {
+  const [failed, setFailed] = useState(false)
   const gradient = gradients[entry.id % gradients.length]
+  const src = entry.thumbnail ? thumbnailUrl(entry.thumbnail) : ""
+
+  if (src && !failed) {
+    return (
+      <div className={`overflow-hidden ${className}`}>
+        <img
+          src={src}
+          alt={entry.title}
+          loading="lazy"
+          className="size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
-      className={`grid place-items-center bg-gradient-to-br ${gradient} ${className}`}
+      className={`grid place-items-center bg-linear-to-br ${gradient} ${className}`}
     >
       <span className="text-2xl font-bold tracking-wide text-base-100/90">
         {initials(entry.title)}
