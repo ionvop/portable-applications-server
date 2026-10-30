@@ -33,6 +33,30 @@ python run.py
 
 A PyWebView window opens at `http://127.0.0.1:8756/`. Closing the window stops the server.
 
+## Development (hot reload)
+
+`run.py` requires a built frontend and opens a desktop window, which is awkward while
+editing the UI. For development, run the API headless and let Vite serve the frontend:
+
+```powershell
+# terminal 1 — Flask API on http://127.0.0.1:8756
+npm run dev:api        # equivalent to: python backend/dev_server.py
+
+# terminal 2 — Vite dev server on http://localhost:5173
+npm run dev
+```
+
+`vite.config.ts` proxies `/api` to `http://127.0.0.1:8756`, so the frontend can call
+`/api/...` on its own origin in both development and production. Verify with:
+
+```powershell
+curl http://localhost:5173/api/health   # {"status":"ok"}
+```
+
+`backend/dev_server.py` skips the PyWebView window and the `dist/` existence check, so no
+build is needed while iterating. Run `python backend/smoke_test.py` to check the API
+baseline without starting a server.
+
 ## Data layout
 
 Everything writable lives in `data/` beside the executable (or beside `run.py` in development):
