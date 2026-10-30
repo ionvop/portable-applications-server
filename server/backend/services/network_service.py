@@ -28,14 +28,22 @@ def get_lan_ip() -> str:
         probe.close()
 
 
+def get_client_url(lan_ip: str | None = None) -> str:
+    """URL a client computer on the LAN should open to browse the catalog."""
+    return f"http://{lan_ip or get_lan_ip()}:{config.PORT}/client"
+
+
 def get_system_info(entry_count: int = 0) -> dict[str, Any]:
     """Snapshot of server state for display in the desktop interface."""
+    lan_ip = get_lan_ip()
     return {
         "app_name": config.APP_NAME,
         "version": config.VERSION,
-        "host": config.HOST,
+        "bind_host": config.BIND_HOST,
+        "ui_host": config.UI_HOST,
         "port": config.PORT,
-        "lan_ip": get_lan_ip(),
+        "lan_ip": lan_ip,
+        "client_url": get_client_url(lan_ip),
         "data_dir": str(paths.data_dir()),
         "apps_dir": str(paths.apps_dir()),
         "entry_count": entry_count,
