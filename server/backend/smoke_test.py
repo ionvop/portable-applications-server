@@ -138,6 +138,57 @@ def main() -> int:
     response = client.get("/api/distribution/999999/download")
     check("download missing entry 404", response.status_code == 404, response.status_code)
 
+    print("client")
+    response = client.get("/api/client/catalog")
+    check("client catalog returns 200", response.status_code == 200, response.status_code)
+    public_entries = response.get_json()
+    public_entry = next((e for e in public_entries if e["id"] == entry_id), None)
+    check("client catalog lists entry", public_entry is not None)
+    if public_entry is not None:
+        check(
+            "client catalog exposes only public fields",
+            set(public_entry) == {"id", "title", "description", "thumbnail"},
+            sorted(public_entry),
+        )
+        check(
+            "client catalog hides directory",
+            "directory" not in public_entry and "executable" not in public_entry,
+        )
+
+    response = client.get(f"/api/client/catalog/{entry_id}")
+    check("client entry returns 200", response.status_code == 200, response.status_code)
+    check(
+        "client entry hides directory",
+        "directory" not in response.get_json(),
+        response.get_json(),
+    )
+
+    response = client.get("/api/client/catalog/999999")
+    check("client missing entry 404", response.status_code == 404, response.status_code)
+
+    response = client.get("/client")
+    check("client page returns 200", response.status_code == 200, response.status_code)
+    check("client page is html", response.mimetype == "text/html", response.mimetype)
+    check("client page lists entry", b"Smoke App Renamed" in response.data)
+    check(
+        "client page links download",
+        f"/api/distribution/{entry_id}/download".encode() in response.data,
+    )
+
+    print("admin guard")
+    remote = {"REMOTE_ADDR": "192.168.1.50"}
+    for path in ("/api/catalog", "/api/system/info", "/api/files/browse"):
+        response = client.get(path, environ_base=remote)
+        check(f"lan client blocked from {path}", response.status_code == 403, response.status_code)
+    response = client.get("/api/client/catalog", environ_base=remote)
+    check("lan client allowed on client catalog", response.status_code == 200, response.status_code)
+    response = client.get(
+        f"/api/distribution/{entry_id}/download", environ_base=remote
+    )
+    check("lan client allowed to download", response.status_code == 200, response.status_code)
+    response = client.get(f"/api/files/thumbnail/{thumbnail}", environ_base=remote)
+    check("lan client allowed to read thumbnails", response.status_code == 200, response.status_code)
+
     print("spa")
     response = client.get("/")
     check("index served", response.status_code == 200, response.status_code)
