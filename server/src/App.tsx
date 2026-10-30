@@ -186,6 +186,7 @@ function App() {
             <EntryDetailView
               key={selectedEntry ? `entry-${selectedEntry.id}` : "entry-new"}
               entry={selectedEntry}
+              system={systemInfo}
               onBack={() => navigate("catalog")}
               onSaved={handleSaved}
               onDeleted={handleDeleted}
