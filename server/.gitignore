@@ -12,6 +12,17 @@ dist
 dist-ssr
 *.local
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.spec
+build/
+
+# Portable server data (catalog database, managed apps, thumbnails, temp)
+data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
