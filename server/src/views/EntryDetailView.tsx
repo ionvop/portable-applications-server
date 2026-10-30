@@ -3,11 +3,11 @@ import {
   ApiError,
   createEntry,
   deleteEntry,
-  downloadUrl,
+  lanDownloadUrl,
   updateEntry,
   uploadThumbnail,
 } from "../api/client"
-import type { CatalogEntry, CatalogEntryInput } from "../types"
+import type { CatalogEntry, CatalogEntryInput, SystemInfo } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
 import { ConfirmDialog } from "../components/ConfirmDialog"
 import { FolderPicker } from "../components/FolderPicker"
@@ -22,6 +22,8 @@ import {
 interface EntryDetailViewProps {
   /** `null` puts the form into create mode. */
   entry: CatalogEntry | null
+  /** Server info, used to build a download link reachable from the LAN. */
+  system: SystemInfo | null
   onBack: () => void
   onSaved: (entry: CatalogEntry) => void
   onDeleted: (id: number) => void
@@ -69,6 +71,7 @@ function errorMessage(cause: unknown): string {
 
 export function EntryDetailView({
   entry,
+  system,
   onBack,
   onSaved,
   onDeleted,
@@ -421,7 +424,7 @@ export function EntryDetailView({
                 className={`btn btn-sm justify-between gap-2 ${
                   entry ? "" : "btn-disabled"
                 }`}
-                href={entry ? downloadUrl(entry.id) : undefined}
+                href={entry ? lanDownloadUrl(system, entry.id) : undefined}
                 aria-disabled={!entry}
                 onClick={(event) => {
                   if (!entry) event.preventDefault()
@@ -430,6 +433,11 @@ export function EntryDetailView({
                 Open distribution link
                 <ChevronRightIcon width={16} height={16} />
               </a>
+              {entry && system && (
+                <p className="break-all font-mono text-[0.6875rem] text-base-content/40">
+                  {lanDownloadUrl(system, entry.id)}
+                </p>
+              )}
             </div>
           </div>
         </div>
