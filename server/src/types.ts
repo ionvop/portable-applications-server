@@ -30,14 +30,27 @@ export interface CatalogEntryInput {
 export interface SystemInfo {
   app_name: string
   version: string
-  host: string
+  /** Interface the WSGI server binds to ("0.0.0.0" = all interfaces). */
+  bind_host: string
+  /** Loopback address the desktop UI loads. */
+  ui_host: string
   port: number
   lan_ip: string
+  /** URL a client computer opens to browse the catalog. */
+  client_url: string
   data_dir: string
   apps_dir: string
   entry_count: number
   /** ISO-8601 UTC timestamp of when the server process started. */
   started_at: string
+}
+
+/** Catalog entry as exposed to client computers (no filesystem details). */
+export interface ClientCatalogEntry {
+  id: number
+  title: string
+  description: string
+  thumbnail: string
 }
 
 export interface BrowseResult {
