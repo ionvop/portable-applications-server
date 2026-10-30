@@ -26,6 +26,21 @@ const toneClass: Record<ActivityItem["tone"], string> = {
   warning: "bg-warning",
 }
 
+/** Compact elapsed-time label derived from the server's start timestamp. */
+function formatUptime(startedAt: string): string {
+  const started = Date.parse(startedAt)
+  if (Number.isNaN(started)) return "—"
+
+  const totalMinutes = Math.max(0, Math.floor((Date.now() - started) / 60_000))
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
+
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m`
+}
+
 export function DashboardView({
   system,
   entries,
@@ -61,7 +76,9 @@ export function DashboardView({
         </div>
         <div className="stat">
           <div className="stat-title">Uptime</div>
-          <div className="stat-value text-2xl">3h 12m</div>
+          <div className="stat-value text-2xl">
+            {formatUptime(system.started_at)}
+          </div>
           <div className="stat-desc">Since last restart</div>
         </div>
       </div>
@@ -246,7 +263,7 @@ export function DashboardView({
 
       <div className="flex items-center gap-2 text-xs text-base-content/40">
         <CatalogIcon width={14} height={14} />
-        Prototype preview — data is static and no requests are sent.
+        Live data from the local server.
       </div>
     </div>
   )
