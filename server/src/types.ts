@@ -36,6 +36,8 @@ export interface SystemInfo {
   data_dir: string
   apps_dir: string
   entry_count: number
+  /** ISO-8601 UTC timestamp of when the server process started. */
+  started_at: string
 }
 
 export interface BrowseResult {
