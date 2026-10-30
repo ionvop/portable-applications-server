@@ -18,6 +18,15 @@ export interface CatalogEntry {
   updated_at: string | null
 }
 
+/** Payload accepted by the create/update catalog endpoints. */
+export interface CatalogEntryInput {
+  title: string
+  description: string
+  thumbnail: string
+  directory: string
+  executable: string
+}
+
 export interface SystemInfo {
   app_name: string
   version: string
