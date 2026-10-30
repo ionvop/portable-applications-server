@@ -5,9 +5,14 @@ from __future__ import annotations
 APP_NAME = "Portable Applications Server"
 VERSION = "0.1.0"
 
-# The API and the built frontend are served from the same local origin so the
-# PyWebView window can call ``/api/...`` without any CORS configuration.
-HOST = "127.0.0.1"
+# The WSGI server binds to every interface so client computers on the local
+# network can reach the distribution endpoints.
+BIND_HOST = "0.0.0.0"
+
+# The PyWebView window (and the admin UI) always talks to the loopback address,
+# so the desktop interface never depends on the machine's LAN configuration.
+UI_HOST = "127.0.0.1"
+
 PORT = 8756
 
 # Names of the directories created inside the portable data folder.
