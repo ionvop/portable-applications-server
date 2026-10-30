@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import socket
+from datetime import datetime, timezone
 from typing import Any
 
 from .. import config, paths
+
+# Captured once when the module is first imported, i.e. when the server starts.
+_STARTED_AT = datetime.now(timezone.utc)
 
 
 def get_lan_ip() -> str:
@@ -35,4 +39,5 @@ def get_system_info(entry_count: int = 0) -> dict[str, Any]:
         "data_dir": str(paths.data_dir()),
         "apps_dir": str(paths.apps_dir()),
         "entry_count": entry_count,
+        "started_at": _STARTED_AT.isoformat(),
     }
