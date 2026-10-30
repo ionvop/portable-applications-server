@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import "./App.css"
+import { ApiError, getSystemInfo, listEntries } from "./api/client"
 import { AppShell } from "./components/layout/AppShell"
 import { CatalogView } from "./views/CatalogView"
 import { DashboardView } from "./views/DashboardView"
@@ -40,6 +41,28 @@ const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
 function App() {
   const [view, setView] = useState<ViewId>("dashboard")
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null)
+
+  // Temporary Step 2 verification: log real data from SQLite. Removed in Step 3.
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([getSystemInfo(), listEntries()])
+      .then(([info, entries]) => {
+        if (cancelled) return
+        console.log("[api] system info:", info)
+        console.log(`[api] ${entries.length} catalog entries:`, entries)
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return
+        if (error instanceof ApiError) {
+          console.error(`[api] ${error.status}: ${error.message}`)
+        } else {
+          console.error("[api] request failed:", error)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const navigate = (next: ViewId) => {
     if (next !== "entry") {
