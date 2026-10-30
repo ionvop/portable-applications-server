@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import type { ActivityItem, CatalogEntry, SystemInfo, Transfer } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
 import {
@@ -5,6 +6,7 @@ import {
   ChevronRightIcon,
   DownloadIcon,
   FilesIcon,
+  LinkIcon,
   PlusIcon,
   ServerIcon,
 } from "../components/icons"
@@ -53,6 +55,24 @@ export function DashboardView({
 }: DashboardViewProps) {
   const activeTransfers = transfers.filter((t) => t.status === "active")
   const recentEntries = entries.slice(0, 4)
+  const [copied, setCopied] = useState(false)
+
+  // Reset the "Copied" label shortly after a successful copy.
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
+  async function copyClientUrl() {
+    try {
+      await navigator.clipboard.writeText(system.client_url)
+      setCopied(true)
+    } catch {
+      // Clipboard access can be denied; the input is selectable as a fallback.
+      setCopied(false)
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -141,8 +161,8 @@ export function DashboardView({
               </div>
               <dl className="flex flex-col gap-2 text-xs">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-base-content/60">Host</dt>
-                  <dd className="font-mono">{system.host}</dd>
+                  <dt className="text-base-content/60">Bind address</dt>
+                  <dd className="font-mono">{system.bind_host}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-base-content/60">Port</dt>
@@ -153,6 +173,43 @@ export function DashboardView({
                   <dd className="truncate font-mono">{system.apps_dir}</dd>
                 </div>
               </dl>
+            </div>
+          </div>
+
+          <div className="card border border-base-300 bg-base-200">
+            <div className="card-body gap-3">
+              <h2 className="card-title text-base">
+                <LinkIcon width={18} height={18} />
+                Client catalog
+              </h2>
+              <p className="text-xs text-base-content/60">
+                Open this address in a browser on any client computer on the
+                same network.
+              </p>
+              <div className="join w-full">
+                <input
+                  className="input input-sm join-item w-full font-mono text-xs"
+                  value={system.client_url}
+                  readOnly
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm join-item"
+                  onClick={() => void copyClientUrl()}
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <a
+                className="btn btn-sm justify-between gap-2"
+                href={system.client_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open client catalog
+                <ChevronRightIcon width={16} height={16} />
+              </a>
             </div>
           </div>
 
