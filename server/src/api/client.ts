@@ -11,6 +11,7 @@ import type {
   BrowseResult,
   CatalogEntry,
   CatalogEntryInput,
+  ClientCatalogEntry,
   SystemInfo,
 } from "../types"
 
@@ -124,4 +125,28 @@ export function thumbnailUrl(filename: string): string {
 /** Direct download URL for an entry's ZIP archive (handled by the browser). */
 export function downloadUrl(id: number): string {
   return `${API_BASE}/distribution/${id}/download`
+}
+
+/**
+ * Absolute download URL reachable from another machine on the LAN.
+ *
+ * Falls back to the relative URL when the LAN address is unknown, which keeps
+ * the link working on the server machine itself.
+ */
+export function lanDownloadUrl(system: SystemInfo | null, id: number): string {
+  if (!system || !system.lan_ip || system.lan_ip === "127.0.0.1") {
+    return downloadUrl(id)
+  }
+  return `http://${system.lan_ip}:${system.port}${downloadUrl(id)}`
+}
+
+/** Client-safe catalog listing (only id, title, description, thumbnail). */
+export function getClientCatalog(): Promise<ClientCatalogEntry[]> {
+  return request<ClientCatalogEntry[]>("/client/catalog")
+}
+
+/** URL of the server-rendered catalog page for client browsers. */
+export function clientPageUrl(system: SystemInfo | null): string {
+  if (!system) return "/client"
+  return system.client_url || `http://${system.lan_ip}:${system.port}/client`
 }
