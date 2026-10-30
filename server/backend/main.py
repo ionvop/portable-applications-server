@@ -62,10 +62,10 @@ def main() -> int:
         )
         return 1
 
-    server = ServerThread(config.HOST, config.PORT)
+    server = ServerThread(config.BIND_HOST, config.PORT)
     server.start()
 
-    if not _wait_for_port(config.HOST, config.PORT):
+    if not _wait_for_port(config.UI_HOST, config.PORT):
         print("The local server did not start in time.", file=sys.stderr)
         server.shutdown()
         return 1
@@ -74,7 +74,7 @@ def main() -> int:
 
     window = webview.create_window(
         config.APP_NAME,
-        f"http://{config.HOST}:{config.PORT}/",
+        f"http://{config.UI_HOST}:{config.PORT}/",
         width=1280,
         height=800,
         min_size=(960, 640),
