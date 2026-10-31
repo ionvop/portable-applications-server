@@ -18,7 +18,11 @@ __pycache__/
 .venv/
 venv/
 *.spec
+!pyinstaller.spec
 build/
+
+# PyInstaller output (build.bat)
+release/
 
 # Portable server data (catalog database, managed apps, thumbnails, temp)
 data/
