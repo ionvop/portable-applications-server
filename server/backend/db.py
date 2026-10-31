@@ -21,6 +21,19 @@ CREATE TABLE IF NOT EXISTS catalog (
 );
 
 CREATE INDEX IF NOT EXISTS idx_catalog_title ON catalog (title);
+
+CREATE TABLE IF NOT EXISTS transfers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id    INTEGER REFERENCES catalog (id) ON DELETE SET NULL,
+    client_ip   TEXT    NOT NULL DEFAULT '',
+    size_bytes  INTEGER NOT NULL DEFAULT 0,
+    status      TEXT    NOT NULL DEFAULT 'active',
+    started_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_transfers_status ON transfers (status);
+CREATE INDEX IF NOT EXISTS idx_transfers_started ON transfers (started_at);
 """
 
 
