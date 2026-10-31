@@ -15,6 +15,17 @@ export function formatBytes(bytes: number): string {
   return `${scaled.toFixed(1)} ${units[unitIndex]}`
 }
 
+/**
+ * Percentage of a transfer that has been streamed, clamped to 0-100.
+ * Returns 0 when the total size is unknown, so the bar stays empty rather
+ * than jumping to a misleading value.
+ */
+export function formatPercent(processed: number, total: number): number {
+  if (!Number.isFinite(total) || total <= 0) return 0
+  const ratio = (processed / total) * 100
+  return Math.min(100, Math.max(0, Math.round(ratio)))
+}
+
 /** Format an ISO timestamp as a local clock time, e.g. "10:42". */
 export function formatClock(iso: string | null): string {
   if (!iso) return "—"
