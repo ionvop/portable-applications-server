@@ -38,3 +38,4 @@ echo [build] Done: release\PortableApplicationsServer\PortableApplicationsServer
 echo [build] Copy that folder anywhere; data\ is created beside the exe on first run.
 
 endlocal
+pause
