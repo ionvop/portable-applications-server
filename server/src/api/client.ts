@@ -8,11 +8,14 @@
  */
 
 import type {
+  ActivityItem,
   BrowseResult,
   CatalogEntry,
   CatalogEntryInput,
   ClientCatalogEntry,
   SystemInfo,
+  Transfer,
+  TransferStatus,
 } from "../types"
 
 const API_BASE = "/api"
@@ -143,6 +146,54 @@ export function lanDownloadUrl(system: SystemInfo | null, id: number): string {
 /** Client-safe catalog listing (only id, title, description, thumbnail). */
 export function getClientCatalog(): Promise<ClientCatalogEntry[]> {
   return request<ClientCatalogEntry[]>("/client/catalog")
+}
+
+/** Wire shape returned by `GET /api/transfers`. */
+interface TransferResponse {
+  id: number
+  entry_id: number | null
+  entry_title: string
+  client_ip: string
+  size_bytes: number
+  status: TransferStatus
+  started_at: string
+  finished_at: string | null
+}
+
+/** Wire shape returned by `GET /api/activity`. */
+interface ActivityResponse {
+  id: string
+  message: string
+  detail: string
+  occurred_at: string
+  tone: ActivityItem["tone"]
+}
+
+/** Recent transfers, newest first. */
+export async function listTransfers(): Promise<Transfer[]> {
+  const rows = await request<TransferResponse[]>("/transfers")
+  return rows.map((row) => ({
+    id: row.id,
+    entryId: row.entry_id,
+    entryTitle: row.entry_title,
+    client: row.client_ip || "unknown",
+    sizeBytes: row.size_bytes,
+    status: row.status,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+  }))
+}
+
+/** Merged transfer and catalog event feed for the dashboard. */
+export async function listActivity(): Promise<ActivityItem[]> {
+  const rows = await request<ActivityResponse[]>("/activity")
+  return rows.map((row) => ({
+    id: row.id,
+    message: row.message,
+    detail: row.detail,
+    occurredAt: row.occurred_at,
+    tone: row.tone,
+  }))
 }
 
 /** URL of the server-rendered catalog page for client browsers. */
