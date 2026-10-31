@@ -45,6 +45,7 @@ class Transfer:
     client_ip: str
     size_bytes: int
     status: str
+    bytes_processed: int = 0
     started_at: str | None = None
     finished_at: str | None = None
 
@@ -56,6 +57,7 @@ class Transfer:
             client_ip=row["client_ip"],
             size_bytes=row["size_bytes"],
             status=row["status"],
+            bytes_processed=row["bytes_processed"],
             started_at=row["started_at"],
             finished_at=row["finished_at"],
         )
