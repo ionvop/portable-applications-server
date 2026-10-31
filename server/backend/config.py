@@ -25,10 +25,18 @@ DB_FILE_NAME = "catalog.db"
 # Location of the built frontend, relative to the resource root.
 WEB_DIR_NAME = "dist"
 
-# Streaming chunk size used when transferring archives to clients.
+# Streaming chunk size used when reading source files into the archive stream.
+# This bounds the memory used per transfer regardless of file size.
 ZIP_CHUNK_SIZE = 1024 * 1024
 
-# Temporary archives older than this are removed on startup.
+# How often (in seconds) a streaming transfer writes its byte progress to the
+# database. Every chunk would mean thousands of writes per second; this keeps
+# the admin UI responsive without hammering SQLite.
+PROGRESS_UPDATE_SECONDS = 0.5
+
+# Temporary archives older than this are removed on startup. Archives are no
+# longer created by the download path (it streams), but older versions left
+# files behind and a crash can still strand one.
 TEMP_MAX_AGE_SECONDS = 60 * 60
 
 # Transfers still marked ``active`` after this long are treated as failed.
