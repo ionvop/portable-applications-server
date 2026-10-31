@@ -1,5 +1,6 @@
 import type { Transfer } from "../types"
 import { DownloadIcon } from "../components/icons"
+import { formatBytes, formatClock } from "../lib/format"
 
 interface TransfersViewProps {
   transfers: Transfer[]
@@ -17,9 +18,31 @@ const statusLabel: Record<Transfer["status"], string> = {
   failed: "Failed",
 }
 
+/** True when an ISO timestamp falls on the current local calendar day. */
+function isToday(iso: string | null): boolean {
+  if (!iso) return false
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return false
+  const now = new Date()
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  )
+}
+
 export function TransfersView({ transfers }: TransfersViewProps) {
   const active = transfers.filter((t) => t.status === "active")
   const history = transfers.filter((t) => t.status !== "active")
+
+  const completedToday = transfers.filter(
+    (t) => t.status === "completed" && isToday(t.finishedAt),
+  )
+  const completedClients = new Set(completedToday.map((t) => t.client)).size
+  const failed = transfers.filter((t) => t.status === "failed")
+  const totalBytes = transfers
+    .filter((t) => t.status === "completed")
+    .reduce((sum, t) => sum + t.sizeBytes, 0)
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -31,18 +54,20 @@ export function TransfersView({ transfers }: TransfersViewProps) {
         </div>
         <div className="stat">
           <div className="stat-title">Completed today</div>
-          <div className="stat-value text-2xl">14</div>
-          <div className="stat-desc">Across 9 clients</div>
+          <div className="stat-value text-2xl">{completedToday.length}</div>
+          <div className="stat-desc">
+            Across {completedClients} client{completedClients === 1 ? "" : "s"}
+          </div>
         </div>
         <div className="stat">
           <div className="stat-title">Failed</div>
-          <div className="stat-value text-2xl">1</div>
-          <div className="stat-desc">Client disconnected</div>
+          <div className="stat-value text-2xl">{failed.length}</div>
+          <div className="stat-desc">Interrupted downloads</div>
         </div>
         <div className="stat">
           <div className="stat-title">Transferred</div>
-          <div className="stat-value text-2xl">32.6 GB</div>
-          <div className="stat-desc">Since server start</div>
+          <div className="stat-value text-2xl">{formatBytes(totalBytes)}</div>
+          <div className="stat-desc">Completed transfers</div>
         </div>
       </div>
 
@@ -70,21 +95,16 @@ export function TransfersView({ transfers }: TransfersViewProps) {
                     </div>
                     <div className="flex items-center gap-3 text-xs text-base-content/60">
                       <span className="font-mono">{transfer.client}</span>
-                      <span>{transfer.sizeMb} MB</span>
-                      <span>started {transfer.startedAt}</span>
+                      <span>{formatBytes(transfer.sizeBytes)}</span>
+                      <span>started {formatClock(transfer.startedAt)}</span>
                     </div>
                   </div>
-                  <progress
-                    className="progress progress-info h-2"
-                    value={transfer.progress}
-                    max={100}
-                  />
+                  {/* ``send_file`` cannot report bytes sent, so the bar stays
+                      indeterminate until Step 7 adds real streaming. */}
+                  <progress className="progress progress-info h-2" />
                   <div className="flex justify-between text-xs text-base-content/60">
-                    <span>{transfer.progress}% complete</span>
-                    <span>
-                      {Math.round((transfer.sizeMb * transfer.progress) / 100)} MB
-                      sent
-                    </span>
+                    <span>In progress</span>
+                    <span>{formatBytes(transfer.sizeBytes)} total</span>
                   </div>
                 </li>
               ))}
@@ -96,6 +116,11 @@ export function TransfersView({ transfers }: TransfersViewProps) {
       <div className="card border border-base-300 bg-base-200">
         <div className="card-body gap-4">
           <h2 className="card-title text-base">Transfer history</h2>
+          {history.length === 0 ? (
+            <p className="text-sm text-base-content/60">
+              No transfers have finished yet.
+            </p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="table table-sm">
               <thead>
@@ -112,9 +137,11 @@ export function TransfersView({ transfers }: TransfersViewProps) {
                   <tr key={transfer.id} className="hover:bg-base-300/40">
                     <td className="font-medium">{transfer.entryTitle}</td>
                     <td className="font-mono text-xs">{transfer.client}</td>
-                    <td className="text-xs">{transfer.sizeMb} MB</td>
+                    <td className="text-xs">
+                      {formatBytes(transfer.sizeBytes)}
+                    </td>
                     <td className="text-xs text-base-content/60">
-                      {transfer.startedAt}
+                      {formatClock(transfer.startedAt)}
                     </td>
                     <td>
                       <span
@@ -128,6 +155,7 @@ export function TransfersView({ transfers }: TransfersViewProps) {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       </div>
     </div>
