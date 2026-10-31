@@ -10,7 +10,7 @@ from __future__ import annotations
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from . import config, paths
-from .api import catalog, client, distribution, files, system
+from .api import catalog, client, distribution, files, system, transfers
 from .services import catalog_service
 
 #: Addresses that count as "this machine". The admin UI always reaches the API
@@ -20,7 +20,13 @@ LOOPBACK_ADDRESSES = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 
 #: Admin-only API prefixes. Clients may read the catalog and download archives,
 #: but must never reach the management endpoints.
-ADMIN_API_PREFIXES = ("/api/catalog", "/api/files", "/api/system")
+ADMIN_API_PREFIXES = (
+    "/api/catalog",
+    "/api/files",
+    "/api/system",
+    "/api/transfers",
+    "/api/activity",
+)
 
 
 def create_app() -> Flask:
@@ -38,6 +44,7 @@ def create_app() -> Flask:
     app.register_blueprint(files.bp)
     app.register_blueprint(distribution.bp)
     app.register_blueprint(system.bp)
+    app.register_blueprint(transfers.bp)
 
     @app.before_request
     def _guard_admin_api():
