@@ -32,8 +32,15 @@ ADMIN_API_PREFIXES = (
 def create_app() -> Flask:
     web_root = paths.web_dir()
 
+    # Resolve templates from the resource root rather than Flask's inferred
+    # ``root_path``. In development that is ``<project>/backend/templates``; in
+    # a PyInstaller bundle it is ``<_MEIPASS>/backend/templates``. Both are
+    # bundled by ``pyinstaller.spec``, so ``/client`` works in either mode.
+    template_root = paths.resource_root() / "backend" / "templates"
+
     app = Flask(
         __name__,
+        template_folder=str(template_root),
         static_folder=str(web_root / "assets"),
         static_url_path="/assets",
     )
