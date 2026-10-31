@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, send_file
+from pathlib import Path
+from typing import Iterator
 
-from ..services import archive_service, catalog_service
+from flask import Blueprint, Response, jsonify, request, stream_with_context
+
+from .. import config
+from ..services import archive_service, catalog_service, transfer_service
 from ..services.catalog_service import CatalogError
 
 bp = Blueprint("distribution", __name__, url_prefix="/api/distribution")
@@ -21,13 +25,43 @@ def download(entry_id: int):
     entry = catalog_service.get_entry(entry_id)
     archive_path = archive_service.build_archive(entry)
 
-    response = send_file(
-        archive_path,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=f"{archive_service.slugify(entry.title)}.zip",
+    # Record the transfer before the first byte leaves the server so the admin
+    # UI can show it as active while the client is still downloading.
+    transfer_id = transfer_service.start_transfer(
+        entry_id=entry.id or entry_id,
+        client_ip=request.remote_addr or "",
+        size_bytes=archive_path.stat().st_size,
     )
-    # ``call_on_close`` fires once the response has been fully streamed, which
-    # is the only safe moment to delete the file on Windows.
-    response.call_on_close(lambda: archive_service.cleanup_archive(archive_path))
+
+    response = Response(
+        stream_with_context(_stream_archive(archive_path, transfer_id)),
+        mimetype="application/zip",
+        direct_passthrough=True,
+    )
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{archive_service.slugify(entry.title)}.zip"'
+    )
+    response.headers["Content-Length"] = str(archive_path.stat().st_size)
     return response
+
+
+def _stream_archive(archive_path: Path, transfer_id: int) -> Iterator[bytes]:
+    """Yield the archive in chunks, recording the outcome when the stream ends.
+
+    ``send_file`` returns a direct-passthrough body whose ``close`` is never
+    called by the WSGI server, so ``call_on_close`` cannot be used to detect
+    completion. Driving the file ourselves gives a reliable success/failure
+    signal and lets the temporary archive be deleted at the right moment.
+    """
+    completed = False
+    try:
+        with archive_path.open("rb") as handle:
+            while chunk := handle.read(config.ZIP_CHUNK_SIZE):
+                yield chunk
+        completed = True
+    finally:
+        status = (
+            transfer_service.COMPLETED if completed else transfer_service.FAILED
+        )
+        transfer_service.finish_transfer(transfer_id, status)
+        archive_service.cleanup_archive(archive_path)
