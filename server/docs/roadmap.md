@@ -1,14 +1,13 @@
 ## Current state (verified)
 
-**Steps 1–6 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, ZIP building, a SPA fallback, a client-facing catalog, and a real transfer history. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (66 checks).
+**Steps 1–7 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, and a real transfer history with live byte progress. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (78 checks).
 
 **LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
 **Remaining functional gaps:**
-1. `archive_service.build_archive` runs synchronously inside the request — a 4 GB game means minutes of silence before the first byte, and no progress is observable (Step 7).
-2. `FilesView` actions (`Open in file explorer`, `Rescan`, `Storage`) are still inert (Step 8).
-3. No packaging spec yet, so the app only runs from source (Step 9).
-4. The client application does not exist; `/client` is a stopgap (Step 11).
+1. `FilesView` actions (`Open in file explorer`, `Rescan`, `Storage`) are still inert (Step 8).
+2. No packaging spec yet, so the app only runs from source (Step 9).
+3. The client application does not exist; `/client` is a stopgap (Step 11).
 
 ---
 
@@ -80,15 +79,28 @@ Each step is independently shippable and verifiable. Don't start the next until 
 - New `backend/api/transfers.py`: `GET /api/transfers` and `GET /api/activity`, both added to `ADMIN_API_PREFIXES` (they expose client IPs).
 - `main.py` / `dev_server.py` reconcile stale rows and prune history on startup.
 - Frontend: `types.ts` reshaped to `Transfer { entryId, entryTitle, client, sizeBytes, startedAt, finishedAt }` and `ActivityItem { occurredAt }`; `client.ts` maps the snake_case wire shapes; new `src/lib/format.ts` (`formatBytes`, `formatClock`, `formatRelativeTime`); `App.tsx` owns the data and polls every 2 s while Dashboard or Transfers is open; `mockData.ts` deleted.
-- Progress bars are now indeterminate ("In progress") — real percentages arrive with Step 7. `TransfersView` stats are computed from real rows.
+- Progress bars shipped indeterminate ("In progress") in this step; Step 7 replaced them with real byte counts. `TransfersView` stats are computed from real rows.
 - `smoke_test.py` covers transfer recording, completion, activity shape, bad `limit`, and the admin guard (66 checks green).
 
-### Step 7 — Non-blocking archive streaming
+### Step 7 — Non-blocking archive streaming ✅
 - Replace `build_archive` + `send_file` with a generator that writes ZIP entries to the response as it walks the tree (or a background build with a `GET /api/distribution/:id/status` poll).
 - This removes the long silent wait and makes `progress` meaningful.
 - Keep `sweep_stale_archives` for the background-build variant.
 
 **Done when:** a large game starts transferring within a second and the UI shows real progress.
+
+**Implemented:**
+- Chose the streaming-generator variant: the ZIP is built *while* it is sent, so nothing is written to `data/tmp` and the first byte leaves immediately. Measured 0.45 s to first byte for a 600 MB application (previously the whole archive had to be compressed first).
+- `archive_service.build_archive` is gone. It is replaced by `plan_archive(entry) -> ArchivePlan` (one sorted walk that records the file list and the uncompressed total) and `iter_archive(plan)`, which yields `(chunk, bytes_consumed)` pairs.
+- `_StreamBuffer` is a write-only sink whose `seek` raises `io.UnsupportedOperation`. `zipfile` detects that and writes the archive with data descriptors, so no seeking is needed. The generator drains the buffer after every `ZIP_CHUNK_SIZE` read, which bounds memory to one chunk even for a single 4 GB file.
+- `distribution.download` now plans, records the transfer, and returns a chunked response. `Content-Length` is gone because the compressed size is not known in advance; `_stream_archive` throttles progress writes to `config.PROGRESS_UPDATE_SECONDS` (0.5 s) and always writes the final count in its `finally` block.
+- `transfers` gains a `bytes_processed` column. `db.init_db` runs an `_ensure_column` migration (`PRAGMA table_info` + `ALTER TABLE`) so existing databases upgrade in place; `CREATE TABLE IF NOT EXISTS` alone would not.
+- `transfer_service.update_transfer_progress` and `finish_transfer(..., bytes_processed=...)` keep the row accurate; `list_transfers` already selects `t.*`, so the new field flows to the API unchanged.
+- Frontend: `Transfer.bytesProcessed` is mapped in `client.ts`; `formatPercent` was added to `lib/format.ts`; `TransfersView` and `DashboardView` now render determinate `<progress value max>` bars with "N% streamed" and "X of Y". The indeterminate bars and their `send_file` comments are gone.
+- `sweep_stale_archives` is kept as a safety net for archives stranded by older versions or a crash.
+- `smoke_test.py` covers the plan totals, multi-chunk streaming, monotonic progress, a valid ZIP with no `Content-Length`, the absence of new temp archives, and the idempotent migration (78 checks green).
+
+> **Semantics change:** `size_bytes` is now the *uncompressed* source total rather than the compressed archive size, because it must be known before the archive exists. `bytes_processed` counts uncompressed bytes consumed, so progress reaches exactly 100%.
 
 ### Step 8 — Files view actions
 - `Open in file explorer` → new `POST /api/files/reveal` using `os.startfile` (Windows-only, guard it).
