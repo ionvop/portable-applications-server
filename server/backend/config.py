@@ -30,3 +30,11 @@ ZIP_CHUNK_SIZE = 1024 * 1024
 
 # Temporary archives older than this are removed on startup.
 TEMP_MAX_AGE_SECONDS = 60 * 60
+
+# Transfers still marked ``active`` after this long are treated as failed.
+# ``call_on_close`` does not fire when a client disconnects mid-stream, so a
+# startup reconciliation pass is the only way to clear those rows.
+TRANSFER_STALE_SECONDS = 60 * 30
+
+# How many transfer rows to keep; older rows are pruned on startup.
+TRANSFER_HISTORY_LIMIT = 500
