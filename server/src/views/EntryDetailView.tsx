@@ -10,10 +10,12 @@ import {
 import type { CatalogEntry, CatalogEntryInput, SystemInfo } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
 import { ConfirmDialog } from "../components/ConfirmDialog"
-import { FolderPicker } from "../components/FolderPicker"
+import { PathPicker } from "../components/PathPicker"
+import { joinPath, splitRelativePath } from "../lib/paths"
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
+  FileIcon,
   FolderIcon,
   ImageIcon,
   TrashIcon,
@@ -91,6 +93,7 @@ export function EntryDetailView({
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [exePickerOpen, setExePickerOpen] = useState(false)
 
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -187,6 +190,16 @@ export function EntryDetailView({
 
   const fieldClass = (field: FieldName) =>
     `input w-full ${fieldErrors[field] ? "input-error" : ""}`
+
+  // Browse-relative form of the directory: no trailing slash, forward slashes.
+  const directory = form.directory
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "")
+  const executableParts = splitRelativePath(form.executable)
+  const exePickerPath = executableParts.dir
+    ? joinPath(directory, executableParts.dir)
+    : directory
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -318,22 +331,42 @@ export function EntryDetailView({
 
                 <fieldset className="fieldset">
                   <legend className="fieldset-legend">Executable path</legend>
-                  <input
-                    type="text"
-                    className={`input w-full font-mono text-xs ${
-                      fieldErrors.executable ? "input-error" : ""
-                    }`}
-                    value={form.executable}
-                    onChange={(event) =>
-                      update("executable", event.target.value)
-                    }
-                    placeholder="gta_sa.exe"
-                  />
+                  <div className="join w-full">
+                    <input
+                      type="text"
+                      className={`input join-item w-full font-mono text-xs ${
+                        fieldErrors.executable ? "input-error" : ""
+                      }`}
+                      value={form.executable}
+                      onChange={(event) =>
+                        update("executable", event.target.value)
+                      }
+                      placeholder="gta_sa.exe"
+                    />
+                    <button
+                      type="button"
+                      className="btn join-item gap-2"
+                      onClick={() => setExePickerOpen(true)}
+                      disabled={!directory}
+                      title={
+                        directory
+                          ? "Browse the application directory"
+                          : "Set the application directory first"
+                      }
+                    >
+                      <FileIcon width={16} height={16} />
+                      Browse
+                    </button>
+                  </div>
                   {fieldErrors.executable ? (
                     <p className="label text-error">{fieldErrors.executable}</p>
-                  ) : (
+                  ) : directory ? (
                     <p className="label">
                       Relative to the application directory.
+                    </p>
+                  ) : (
+                    <p className="label">
+                      Set the application directory to browse for the file.
                     </p>
                   )}
                 </fieldset>
@@ -459,15 +492,38 @@ export function EntryDetailView({
         }}
       />
 
-      <FolderPicker
+      <PathPicker
         key={pickerOpen ? `picker-${form.directory}` : "picker-closed"}
         open={pickerOpen}
+        mode="folder"
         initialPath={form.directory}
         onSelect={(path) => {
           update("directory", path)
           setPickerOpen(false)
         }}
         onCancel={() => setPickerOpen(false)}
+      />
+
+      <PathPicker
+        key={
+          exePickerOpen
+            ? `exe-picker-${directory}-${form.executable}`
+            : "exe-picker-closed"
+        }
+        open={exePickerOpen}
+        mode="file"
+        rootPath={directory}
+        initialPath={exePickerPath}
+        initialSelection={executableParts.name}
+        onSelect={(path) => {
+          const relative =
+            directory && path.startsWith(`${directory}/`)
+              ? path.slice(directory.length + 1)
+              : path
+          update("executable", relative)
+          setExePickerOpen(false)
+        }}
+        onCancel={() => setExePickerOpen(false)}
       />
     </div>
   )
