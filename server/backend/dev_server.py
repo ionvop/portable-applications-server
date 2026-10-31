@@ -21,12 +21,14 @@ if __package__ in (None, ""):
 
 from . import config, db
 from .app import create_app
-from .services import archive_service, network_service
+from .services import archive_service, network_service, transfer_service
 
 
 def main() -> int:
     db.init_db()
     archive_service.sweep_stale_archives()
+    transfer_service.reconcile_stale_transfers()
+    transfer_service.prune_transfers()
 
     lan_ip = network_service.get_lan_ip()
     print(f"API listening on http://{config.UI_HOST}:{config.PORT} (Ctrl+C to stop)")
