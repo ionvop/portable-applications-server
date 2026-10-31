@@ -106,15 +106,28 @@ relative path within that directory.
 ## Packaging
 
 ```powershell
-npm run build
-pyinstaller --noconfirm --onefile --name "PortableApplicationsServer" ^
-  --add-data "dist;dist" ^
-  --hidden-import webview.platforms.edgechromium ^
-  run.py
+build.bat
 ```
 
-The resulting executable reads bundled resources from `sys._MEIPASS` and writes its `data/`
-folder next to itself, keeping the build portable.
+`build.bat` runs `npm run build` and then PyInstaller against `pyinstaller.spec` at the
+project root. The spec produces an **onedir** bundle in `release\PortableApplicationsServer\`:
+
+| Bundled as | Destination in the bundle | Read by |
+|---|---|---|
+| `dist/` | `_internal\dist\` | `paths.web_dir()` → `resource_root() / "dist"` |
+| `backend/templates/` | `_internal\backend\templates\` | `create_app()` → `resource_root() / "backend" / "templates"` |
+
+`backend/templates/` must be bundled: `/client` is a Jinja page, and without it the frozen
+executable answers 500 with `TemplateNotFound`.
+
+The executable reads bundled resources from `sys._MEIPASS` and writes its `data/` folder
+next to itself (`paths.base_dir()` returns the executable's directory when frozen), keeping
+the build portable. To verify a build, copy `release\PortableApplicationsServer\` to another
+folder, run the exe, and confirm a fresh `data\catalog.db` appears beside it.
+
+The build is windowed (`console=False`), so startup errors are not printed to a console. If
+the app exits immediately, check that `_internal\dist\index.html` exists — `main.py` refuses
+to start without it.
 
 ## Module map
 
