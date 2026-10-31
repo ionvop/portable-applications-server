@@ -21,7 +21,7 @@ from werkzeug.serving import make_server
 
 from . import config, db, paths
 from .app import create_app
-from .services import archive_service
+from .services import archive_service, transfer_service
 
 
 class ServerThread(threading.Thread):
@@ -53,6 +53,8 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
 def main() -> int:
     db.init_db()
     archive_service.sweep_stale_archives()
+    transfer_service.reconcile_stale_transfers()
+    transfer_service.prune_transfers()
 
     if not (paths.web_dir() / "index.html").is_file():
         print(
