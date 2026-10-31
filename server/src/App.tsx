@@ -1,15 +1,31 @@
 import { useCallback, useEffect, useState } from "react"
 import "./App.css"
-import { ApiError, getSystemInfo, listEntries } from "./api/client"
+import {
+  ApiError,
+  getSystemInfo,
+  listActivity,
+  listEntries,
+  listTransfers,
+} from "./api/client"
 import { AppShell } from "./components/layout/AppShell"
 import { CatalogView } from "./views/CatalogView"
 import { DashboardView } from "./views/DashboardView"
 import { EntryDetailView } from "./views/EntryDetailView"
 import { FilesView } from "./views/FilesView"
 import { TransfersView } from "./views/TransfersView"
-// Transfers and activity have no backend endpoints yet (Step 6).
-import { activity, transfers } from "./data/mockData"
-import type { CatalogEntry, SystemInfo, ViewId } from "./types"
+import type {
+  ActivityItem,
+  CatalogEntry,
+  SystemInfo,
+  Transfer,
+  ViewId,
+} from "./types"
+
+/** Views that show live transfer data and therefore poll the server. */
+const LIVE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>(["dashboard", "transfers"])
+
+/** How often the live views refresh transfer and activity data. */
+const POLL_INTERVAL_MS = 2000
 
 const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
   dashboard: {
@@ -41,6 +57,8 @@ function App() {
 
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [entries, setEntries] = useState<CatalogEntry[]>([])
+  const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,13 +66,17 @@ function App() {
     setLoading(true)
     setError(null)
     try {
-      const [info, catalog] = await Promise.all([
+      const [info, catalog, transferRows, activityRows] = await Promise.all([
         getSystemInfo(),
         listEntries(),
+        listTransfers(),
+        listActivity(),
       ])
       if (signal?.aborted) return
       setSystemInfo(info)
       setEntries(catalog)
+      setTransfers(transferRows)
+      setActivity(activityRows)
     } catch (cause: unknown) {
       if (signal?.aborted) return
       setError(
@@ -74,6 +96,30 @@ function App() {
     void load(controller.signal)
     return () => controller.abort()
   }, [load])
+
+  // Poll only while a view that displays live transfer data is open. Errors are
+  // ignored here so a transient failure never replaces the loaded data.
+  useEffect(() => {
+    if (!LIVE_VIEWS.has(view)) return
+
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      void Promise.all([listTransfers(), listActivity()])
+        .then(([transferRows, activityRows]) => {
+          if (cancelled) return
+          setTransfers(transferRows)
+          setActivity(activityRows)
+        })
+        .catch(() => {
+          // Keep the last known data; the next tick retries.
+        })
+    }, POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [view])
 
   /** Re-read the catalog without touching the global loading/error banner. */
   const refreshEntries = useCallback(async () => {
