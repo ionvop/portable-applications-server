@@ -31,17 +31,50 @@ def start_transfer(entry_id: int, client_ip: str, size_bytes: int) -> int:
         return int(cursor.lastrowid)
 
 
-def finish_transfer(transfer_id: int, status: str) -> None:
-    """Mark a transfer as ``completed`` or ``failed`` and stamp the end time."""
+def update_transfer_progress(transfer_id: int, bytes_processed: int) -> None:
+    """Record how many source bytes the stream has consumed so far.
+
+    Called from the download generator, so it must stay cheap: one small
+    ``UPDATE`` per call, throttled by the caller.
+    """
     with db.get_connection() as connection:
         connection.execute(
-            """
-            UPDATE transfers
-               SET status = ?, finished_at = datetime('now')
-             WHERE id = ?
-            """,
-            (status, transfer_id),
+            "UPDATE transfers SET bytes_processed = ? WHERE id = ?",
+            (max(0, bytes_processed), transfer_id),
         )
+
+
+def finish_transfer(
+    transfer_id: int,
+    status: str,
+    bytes_processed: int | None = None,
+) -> None:
+    """Mark a transfer as ``completed`` or ``failed`` and stamp the end time.
+
+    ``bytes_processed`` is written in the same statement when supplied so the
+    final row is exact even if the last throttled progress update was skipped.
+    """
+    with db.get_connection() as connection:
+        if bytes_processed is None:
+            connection.execute(
+                """
+                UPDATE transfers
+                   SET status = ?, finished_at = datetime('now')
+                 WHERE id = ?
+                """,
+                (status, transfer_id),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE transfers
+                   SET status = ?,
+                       bytes_processed = ?,
+                       finished_at = datetime('now')
+                 WHERE id = ?
+                """,
+                (status, max(0, bytes_processed), transfer_id),
+            )
 
 
 def list_transfers(limit: int = 100) -> list[dict[str, Any]]:
