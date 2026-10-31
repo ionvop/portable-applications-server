@@ -1,12 +1,11 @@
 ## Current state (verified)
 
-**Steps 1–8 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (96 checks).
+**Steps 1–9 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (96 checks). `build.bat` produces a portable onedir bundle in `release/`.
 
 **LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
 **Remaining functional gaps:**
-1. No packaging spec yet, so the app only runs from source (Step 9).
-2. The client application does not exist; `/client` is a stopgap (Step 11).
+1. The client application does not exist; `/client` is a stopgap (Step 11).
 
 ---
 
@@ -124,6 +123,14 @@ Each step is independently shippable and verifiable. Don't start the next until 
 - Update `start.bat` and `README.md` accordingly.
 
 **Done when:** the exe runs from a copied folder on a clean machine.
+
+**Implemented:**
+- New `pyinstaller.spec` builds an **onedir** bundle into `release\PortableApplicationsServer\`. `datas` maps `dist/` → `dist` and `backend/templates/` → `backend/templates`, matching `paths.web_dir()` and the new explicit `template_folder`. `hiddenimports` collects `webview` submodules plus the EdgeChromium/WinForms backends and `pythonnet`, which pywebview imports dynamically and static analysis misses. `console=False` makes it a windowed app; `upx=False` avoids AV false positives.
+- `backend/app.py` now passes `template_folder=paths.resource_root() / "backend" / "templates"` to `Flask(...)`, so `/client` resolves the same way in development and frozen. Previously Flask inferred it from `backend/__init__.py`, which only worked by accident of the bundle layout.
+- New `build.bat` runs `npm run build`, asserts `dist\index.html` exists, then invokes `python -m PyInstaller --noconfirm --clean --distpath release --workpath build\pyinstaller pyinstaller.spec`, failing loudly at each stage.
+- `start.bat` stays the development launcher and now documents the packaged path. `.gitignore` un-ignores `pyinstaller.spec` (it was caught by `*.spec`) and ignores `release/`.
+- `README.md` gained a Packaging section; `backend/README.md`'s Packaging section was rewritten for onedir, the spec, the template requirement, and the data-beside-exe guarantee.
+- `data/` is never bundled: `paths.base_dir()` returns `Path(sys.executable).parent` when frozen, so the first run creates `data\catalog.db` beside the exe. Copying the release folder therefore carries no stale state.
 
 ### Step 10 — Hardening
 - Extend `smoke_test.py` with transfer/activity/storage assertions. *(transfer/activity/storage are already covered; the remaining work is the pytest wrapper and the UI toast.)*
