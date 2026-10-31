@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { ActivityItem, CatalogEntry, SystemInfo, Transfer } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
-import { formatBytes, formatRelativeTime } from "../lib/format"
+import { formatBytes, formatPercent, formatRelativeTime } from "../lib/format"
 import {
   CatalogIcon,
   ChevronRightIcon,
@@ -268,25 +268,36 @@ export function DashboardView({
               </p>
             ) : (
               <ul className="flex flex-col gap-4">
-                {activeTransfers.map((transfer) => (
-                  <li key={transfer.id} className="flex flex-col gap-1.5">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <p className="truncate text-sm font-medium">
-                        {transfer.entryTitle}
-                      </p>
-                      <span className="shrink-0 font-mono text-xs text-base-content/60">
-                        {transfer.client}
-                      </span>
-                    </div>
-                    {/* ``send_file`` cannot report bytes sent, so the bar stays
-                        indeterminate until Step 7 adds real streaming. */}
-                    <progress className="progress progress-primary h-1.5" />
-                    <div className="flex justify-between text-xs text-base-content/60">
-                      <span>In progress</span>
-                      <span>{formatBytes(transfer.sizeBytes)}</span>
-                    </div>
-                  </li>
-                ))}
+                {activeTransfers.map((transfer) => {
+                  const percent = formatPercent(
+                    transfer.bytesProcessed,
+                    transfer.sizeBytes,
+                  )
+                  return (
+                    <li key={transfer.id} className="flex flex-col gap-1.5">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <p className="truncate text-sm font-medium">
+                          {transfer.entryTitle}
+                        </p>
+                        <span className="shrink-0 font-mono text-xs text-base-content/60">
+                          {transfer.client}
+                        </span>
+                      </div>
+                      <progress
+                        className="progress progress-primary h-1.5"
+                        value={transfer.bytesProcessed}
+                        max={transfer.sizeBytes || 1}
+                      />
+                      <div className="flex justify-between text-xs text-base-content/60">
+                        <span>{percent}% streamed</span>
+                        <span>
+                          {formatBytes(transfer.bytesProcessed)} of{" "}
+                          {formatBytes(transfer.sizeBytes)}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
