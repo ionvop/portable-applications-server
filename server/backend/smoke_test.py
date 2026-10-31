@@ -134,9 +134,51 @@ def main() -> int:
         names = set(archive.namelist())
     check("zip contains exe", "game.exe" in names, names)
     check("zip contains nested file", "data/level1.dat" in names, names)
+    # ``call_on_close`` only runs once the response is closed, which is what a
+    # real WSGI server does after the last byte is written.
+    response.close()
 
     response = client.get("/api/distribution/999999/download")
     check("download missing entry 404", response.status_code == 404, response.status_code)
+
+    print("transfers")
+    response = client.get("/api/transfers")
+    check("transfers returns 200", response.status_code == 200, response.status_code)
+    transfer_rows = response.get_json()
+    check("transfers is a list", isinstance(transfer_rows, list), type(transfer_rows))
+    transfer = next((t for t in transfer_rows if t["entry_id"] == entry_id), None)
+    check("download recorded a transfer", transfer is not None, transfer_rows)
+    if transfer is not None:
+        check(
+            "transfer completed after streaming",
+            transfer["status"] == "completed",
+            transfer["status"],
+        )
+        check("transfer has size", transfer["size_bytes"] > 0, transfer["size_bytes"])
+        check("transfer has client ip", bool(transfer["client_ip"]), transfer["client_ip"])
+        check("transfer has entry title", bool(transfer["entry_title"]), transfer)
+        check("transfer has finished_at", bool(transfer["finished_at"]), transfer)
+
+    response = client.get("/api/activity")
+    check("activity returns 200", response.status_code == 200, response.status_code)
+    activity_rows = response.get_json()
+    check("activity is a list", isinstance(activity_rows, list), type(activity_rows))
+    check("activity is not empty", bool(activity_rows), activity_rows)
+    if activity_rows:
+        first = activity_rows[0]
+        check(
+            "activity item shape",
+            set(first) == {"id", "message", "detail", "occurred_at", "tone"},
+            sorted(first),
+        )
+        check(
+            "activity mentions the transfer",
+            any("Transfer" in item["message"] for item in activity_rows),
+            [item["message"] for item in activity_rows],
+        )
+
+    response = client.get("/api/transfers?limit=abc")
+    check("transfers rejects bad limit", response.status_code == 400, response.status_code)
 
     print("client")
     response = client.get("/api/client/catalog")
@@ -177,7 +219,13 @@ def main() -> int:
 
     print("admin guard")
     remote = {"REMOTE_ADDR": "192.168.1.50"}
-    for path in ("/api/catalog", "/api/system/info", "/api/files/browse"):
+    for path in (
+        "/api/catalog",
+        "/api/system/info",
+        "/api/files/browse",
+        "/api/transfers",
+        "/api/activity",
+    ):
         response = client.get(path, environ_base=remote)
         check(f"lan client blocked from {path}", response.status_code == 403, response.status_code)
     response = client.get("/api/client/catalog", environ_base=remote)
