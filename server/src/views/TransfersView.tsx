@@ -1,6 +1,6 @@
 import type { Transfer } from "../types"
 import { DownloadIcon } from "../components/icons"
-import { formatBytes, formatClock } from "../lib/format"
+import { formatBytes, formatClock, formatPercent } from "../lib/format"
 
 interface TransfersViewProps {
   transfers: Transfer[]
@@ -80,34 +80,45 @@ export function TransfersView({ transfers }: TransfersViewProps) {
             </p>
           ) : (
             <ul className="flex flex-col gap-5">
-              {active.map((transfer) => (
-                <li key={transfer.id} className="flex flex-col gap-2">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <DownloadIcon
-                        width={16}
-                        height={16}
-                        className="text-info"
-                      />
-                      <span className="text-sm font-medium">
-                        {transfer.entryTitle}
+              {active.map((transfer) => {
+                const percent = formatPercent(
+                  transfer.bytesProcessed,
+                  transfer.sizeBytes,
+                )
+                return (
+                  <li key={transfer.id} className="flex flex-col gap-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <DownloadIcon
+                          width={16}
+                          height={16}
+                          className="text-info"
+                        />
+                        <span className="text-sm font-medium">
+                          {transfer.entryTitle}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-base-content/60">
+                        <span className="font-mono">{transfer.client}</span>
+                        <span>{formatBytes(transfer.sizeBytes)}</span>
+                        <span>started {formatClock(transfer.startedAt)}</span>
+                      </div>
+                    </div>
+                    <progress
+                      className="progress progress-info h-2"
+                      value={transfer.bytesProcessed}
+                      max={transfer.sizeBytes || 1}
+                    />
+                    <div className="flex justify-between text-xs text-base-content/60">
+                      <span>{percent}% streamed</span>
+                      <span>
+                        {formatBytes(transfer.bytesProcessed)} of{" "}
+                        {formatBytes(transfer.sizeBytes)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-base-content/60">
-                      <span className="font-mono">{transfer.client}</span>
-                      <span>{formatBytes(transfer.sizeBytes)}</span>
-                      <span>started {formatClock(transfer.startedAt)}</span>
-                    </div>
-                  </div>
-                  {/* ``send_file`` cannot report bytes sent, so the bar stays
-                      indeterminate until Step 7 adds real streaming. */}
-                  <progress className="progress progress-info h-2" />
-                  <div className="flex justify-between text-xs text-base-content/60">
-                    <span>In progress</span>
-                    <span>{formatBytes(transfer.sizeBytes)} total</span>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
