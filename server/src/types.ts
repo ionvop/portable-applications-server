@@ -59,6 +59,26 @@ export interface BrowseResult {
   files: string[]
 }
 
+/** Size and file count of one managed folder. */
+export interface StorageFolderUsage {
+  bytes: number
+  files: number
+}
+
+/** Disk usage of the managed folders plus free space on the data volume. */
+export interface StorageInfo {
+  apps: StorageFolderUsage
+  thumbnails: StorageFolderUsage
+  tmp: StorageFolderUsage
+  /** Sum of the three managed folders. */
+  totalBytes: number
+  disk: {
+    totalBytes: number
+    usedBytes: number
+    freeBytes: number
+  }
+}
+
 export type TransferStatus = "active" | "completed" | "failed"
 
 /** A ZIP download served to a client computer. */
