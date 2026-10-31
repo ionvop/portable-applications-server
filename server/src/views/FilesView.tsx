@@ -1,13 +1,21 @@
-import { useEffect, useMemo, useState } from "react"
-import { ApiError, browse } from "../api/client"
-import type { BrowseResult } from "../types"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ApiError, browse, getStorage, revealPath } from "../api/client"
+import type { BrowseResult, StorageInfo } from "../types"
 import { joinPath, pathSegments } from "../lib/paths"
+import { formatBytes } from "../lib/format"
 import {
   ChevronRightIcon,
   FileIcon,
   FolderIcon,
   SearchIcon,
 } from "../components/icons"
+
+/** Turn any thrown value into a message suitable for an inline alert. */
+function errorMessage(cause: unknown, fallback: string): string {
+  if (cause instanceof ApiError) return `${cause.status}: ${cause.message}`
+  if (cause instanceof Error) return cause.message
+  return fallback
+}
 
 export function FilesView() {
   const [path, setPath] = useState("")
@@ -16,6 +24,13 @@ export function FilesView() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState("")
   const [reloadKey, setReloadKey] = useState(0)
+
+  const [storage, setStorage] = useState<StorageInfo | null>(null)
+  const [storageLoading, setStorageLoading] = useState(true)
+  const [storageError, setStorageError] = useState<string | null>(null)
+
+  const [revealing, setRevealing] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -42,6 +57,50 @@ export function FilesView() {
       })
     return () => controller.abort()
   }, [path, reloadKey])
+
+  // Storage is re-read on mount and whenever the folder is rescanned, so the
+  // numbers always reflect the filesystem at the time of the last refresh.
+  // The loading flag is set by `rescan` rather than here, so the effect only
+  // synchronizes with the server instead of triggering a second render.
+  useEffect(() => {
+    const controller = new AbortController()
+    getStorage()
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setStorage(result)
+        setStorageError(null)
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return
+        setStorageError(errorMessage(cause, "Unable to read disk usage."))
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStorageLoading(false)
+      })
+    return () => controller.abort()
+  }, [reloadKey])
+
+  const rescan = useCallback(() => {
+    setActionError(null)
+    setStorageLoading(true)
+    setStorageError(null)
+    setReloadKey((value) => value + 1)
+  }, [])
+
+  const reveal = useCallback(async () => {
+    if (revealing) return
+    setRevealing(true)
+    setActionError(null)
+    try {
+      await revealPath(path)
+    } catch (cause: unknown) {
+      setActionError(
+        errorMessage(cause, "Unable to open the file explorer."),
+      )
+    } finally {
+      setRevealing(false)
+    }
+  }, [path, revealing])
 
   const isRoot = path === ""
   const segments = pathSegments(path)
@@ -190,19 +249,110 @@ export function FilesView() {
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Folder actions</h2>
               <p className="text-xs text-base-content/60">
-                Prototype only — these controls are not wired up.
+                {isRoot ? "data/apps" : path}
               </p>
               <div className="flex flex-col gap-2">
-                <button type="button" className="btn btn-sm justify-start">
+                <button
+                  type="button"
+                  className="btn btn-sm justify-start"
+                  onClick={() => void reveal()}
+                  disabled={revealing}
+                >
+                  {revealing && (
+                    <span className="loading loading-spinner loading-xs" />
+                  )}
                   Open in file explorer
                 </button>
-                <button type="button" className="btn btn-sm justify-start">
+                <button
+                  type="button"
+                  className="btn btn-sm justify-start"
+                  onClick={rescan}
+                  disabled={loading}
+                >
                   Rescan directory
                 </button>
-                <button type="button" className="btn btn-sm justify-start">
-                  Verify archive integrity
-                </button>
               </div>
+              {actionError && (
+                <div role="alert" className="alert alert-error alert-soft">
+                  <span className="text-xs">{actionError}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card border border-base-300 bg-base-200">
+            <div className="card-body gap-3">
+              <h2 className="card-title text-base">Storage</h2>
+
+              {storageError ? (
+                <div role="alert" className="alert alert-error alert-soft">
+                  <span className="text-xs">{storageError}</span>
+                  <button
+                    type="button"
+                    className="btn btn-xs"
+                    onClick={rescan}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : storageLoading && !storage ? (
+                <div className="grid place-items-center py-6">
+                  <span className="loading loading-spinner loading-sm" />
+                </div>
+              ) : storage ? (
+                <>
+                  <dl className="flex flex-col gap-2 text-xs">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-base-content/60">Applications</dt>
+                      <dd className="font-mono">
+                        {formatBytes(storage.apps.bytes)}
+                        <span className="ml-1 text-base-content/50">
+                          ({storage.apps.files})
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-base-content/60">Thumbnails</dt>
+                      <dd className="font-mono">
+                        {formatBytes(storage.thumbnails.bytes)}
+                        <span className="ml-1 text-base-content/50">
+                          ({storage.thumbnails.files})
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-base-content/60">Temporary</dt>
+                      <dd className="font-mono">
+                        {formatBytes(storage.tmp.bytes)}
+                        <span className="ml-1 text-base-content/50">
+                          ({storage.tmp.files})
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-4 border-t border-base-300 pt-2">
+                      <dt className="text-base-content/60">Managed total</dt>
+                      <dd className="font-mono font-medium">
+                        {formatBytes(storage.totalBytes)}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="flex flex-col gap-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-base-content/60">Disk free</span>
+                      <span className="font-mono">
+                        {formatBytes(storage.disk.freeBytes)} of{" "}
+                        {formatBytes(storage.disk.totalBytes)}
+                      </span>
+                    </div>
+                    <progress
+                      className="progress progress-info w-full"
+                      value={storage.disk.usedBytes}
+                      max={storage.disk.totalBytes}
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
