@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import io
+import sqlite3
 import sys
 import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend import db, paths
+from backend import config, db, paths
 from backend.app import create_app
-from backend.services import archive_service
+from backend.services import archive_service, catalog_service
 
 failures: list[str] = []
 
@@ -56,12 +57,18 @@ def main() -> int:
     )
     check("absolute executable rejected", response.status_code == 400, response.status_code)
 
-    # Create a real app directory with content.
+    # Create a real app directory with content. ``big.bin`` spans several
+    # streaming chunks so the generator is exercised more than once.
     app_dir = paths.apps_dir() / "smoke-app"
     app_dir.mkdir(parents=True, exist_ok=True)
     (app_dir / "game.exe").write_bytes(b"MZ fake executable")
     (app_dir / "data").mkdir(exist_ok=True)
     (app_dir / "data" / "level1.dat").write_bytes(b"level data")
+    big_size = config.ZIP_CHUNK_SIZE * 2 + 1234
+    (app_dir / "big.bin").write_bytes(b"\x00" * big_size)
+    source_total = sum(
+        path.stat().st_size for path in app_dir.rglob("*") if path.is_file()
+    )
 
     response = client.post(
         "/api/catalog",
@@ -130,16 +137,79 @@ def main() -> int:
         "smoke-app-renamed.zip" in response.headers.get("Content-Disposition", ""),
         response.headers.get("Content-Disposition"),
     )
+    # The archive is built while it is sent, so its compressed size is unknown
+    # when the response starts and no Content-Length can be advertised.
+    check(
+        "download has no content-length",
+        "Content-Length" not in response.headers,
+        response.headers.get("Content-Length"),
+    )
     with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
         names = set(archive.namelist())
+        check("zip is valid", archive.testzip() is None)
     check("zip contains exe", "game.exe" in names, names)
     check("zip contains nested file", "data/level1.dat" in names, names)
+    check("zip contains multi-chunk file", "big.bin" in names, names)
     # ``call_on_close`` only runs once the response is closed, which is what a
     # real WSGI server does after the last byte is written.
     response.close()
 
     response = client.get("/api/distribution/999999/download")
     check("download missing entry 404", response.status_code == 404, response.status_code)
+
+    print("streaming")
+    # Archives left by older versions may still be in the temp folder; only the
+    # files created by this run matter.
+    archives_before = set(paths.tmp_dir().glob("*.zip"))
+    entry_model = catalog_service.get_entry(entry_id)
+    plan = archive_service.plan_archive(entry_model)
+    check("plan totals the source size", plan.total_bytes == source_total, plan.total_bytes)
+    check("plan lists every file", len(plan.files) == 3, len(plan.files))
+
+    chunks = list(archive_service.iter_archive(plan))
+    check("stream yields multiple chunks", len(chunks) > 1, len(chunks))
+    check(
+        "stream reports monotonic progress",
+        all(
+            earlier[1] <= later[1]
+            for earlier, later in zip(chunks, chunks[1:])
+        ),
+        [consumed for _, consumed in chunks],
+    )
+    check(
+        "stream ends at the source total",
+        chunks[-1][1] == source_total,
+        (chunks[-1][1], source_total),
+    )
+    check(
+        "stream produces a valid zip",
+        zipfile.ZipFile(io.BytesIO(b"".join(chunk for chunk, _ in chunks))).testzip()
+        is None,
+    )
+    archives_after = set(paths.tmp_dir().glob("*.zip"))
+    check(
+        "streaming creates no temp archive",
+        archives_after == archives_before,
+        sorted(str(path) for path in archives_after - archives_before),
+    )
+
+    print("migration")
+    legacy = sqlite3.connect(":memory:")
+    legacy.row_factory = sqlite3.Row
+    legacy.execute(
+        "CREATE TABLE transfers (id INTEGER PRIMARY KEY, size_bytes INTEGER)"
+    )
+    db._ensure_column(
+        legacy, "transfers", "bytes_processed", "INTEGER NOT NULL DEFAULT 0"
+    )
+    columns = {row["name"] for row in legacy.execute("PRAGMA table_info(transfers)")}
+    check("migration adds bytes_processed", "bytes_processed" in columns, columns)
+    # Running it again must be a no-op rather than an error.
+    db._ensure_column(
+        legacy, "transfers", "bytes_processed", "INTEGER NOT NULL DEFAULT 0"
+    )
+    check("migration is idempotent", True)
+    legacy.close()
 
     print("transfers")
     response = client.get("/api/transfers")
@@ -155,6 +225,16 @@ def main() -> int:
             transfer["status"],
         )
         check("transfer has size", transfer["size_bytes"] > 0, transfer["size_bytes"])
+        check(
+            "transfer size is the source total",
+            transfer["size_bytes"] == source_total,
+            (transfer["size_bytes"], source_total),
+        )
+        check(
+            "transfer reports full progress",
+            transfer["bytes_processed"] == transfer["size_bytes"],
+            (transfer["bytes_processed"], transfer["size_bytes"]),
+        )
         check("transfer has client ip", bool(transfer["client_ip"]), transfer["client_ip"])
         check("transfer has entry title", bool(transfer["entry_title"]), transfer)
         check("transfer has finished_at", bool(transfer["finished_at"]), transfer)
