@@ -1,7 +1,9 @@
-"""Directory browsing and thumbnail management endpoints."""
+"""Directory browsing, reveal and thumbnail management endpoints."""
 
 from __future__ import annotations
 
+import os
+import sys
 import uuid
 from pathlib import Path
 
@@ -20,15 +22,21 @@ def _handle_catalog_error(error: CatalogError):
     return jsonify({"error": error.message}), error.status
 
 
+def _resolve_inside_apps(relative: str) -> Path:
+    """Resolve a browse-relative path, refusing anything outside ``data/apps``."""
+    apps_root = paths.apps_dir().resolve()
+    target = (apps_root / relative).resolve()
+    if target != apps_root and apps_root not in target.parents:
+        raise CatalogError("The path must stay inside the managed apps folder.")
+    return target
+
+
 @bp.get("/browse")
 def browse():
     """List subdirectories and files inside the managed apps folder."""
     relative = request.args.get("path", "").strip()
-    apps_root = paths.apps_dir().resolve()
-    target = (apps_root / relative).resolve()
+    target = _resolve_inside_apps(relative)
 
-    if target != apps_root and apps_root not in target.parents:
-        raise CatalogError("The path must stay inside the managed apps folder.")
     if not target.is_dir():
         raise CatalogError(f"Directory not found: {relative}", status=404)
 
@@ -47,6 +55,36 @@ def browse():
             "files": files,
         }
     )
+
+
+@bp.post("/reveal")
+def reveal():
+    """Open a folder from the managed apps area in the OS file explorer.
+
+    Only meaningful on the server machine, so the endpoint is Windows-only and
+    is already restricted to loopback callers by the admin API guard.
+    """
+    if sys.platform != "win32":
+        raise CatalogError(
+            "Opening the file explorer is only supported on Windows.",
+            status=501,
+        )
+
+    payload = request.get_json(silent=True) or {}
+    relative = str(payload.get("path", "")).strip()
+    target = _resolve_inside_apps(relative)
+
+    if not target.is_dir():
+        raise CatalogError(f"Directory not found: {relative}", status=404)
+
+    try:
+        os.startfile(str(target))  # type: ignore[attr-defined]
+    except OSError as error:
+        raise CatalogError(
+            f"Could not open the file explorer: {error}", status=500
+        )
+
+    return jsonify({"revealed": str(target)})
 
 
 @bp.post("/thumbnail")
