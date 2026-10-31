@@ -59,4 +59,29 @@ python run.py
 
 `run.py` serves the built frontend from `dist/` and opens a PyWebView window at
 `http://127.0.0.1:8756/`. See [`backend/README.md`](backend/README.md) for the API reference,
-data layout, and PyInstaller packaging.
+data layout, and packaging details.
+
+## Packaging
+
+Build a portable Windows bundle with:
+
+```powershell
+build.bat
+```
+
+That runs `npm run build` and then PyInstaller against [`pyinstaller.spec`](pyinstaller.spec),
+producing:
+
+```
+release\PortableApplicationsServer\
+    PortableApplicationsServer.exe
+    _internal\        # Python runtime, dist\ frontend, backend\templates
+    data\             # created on first run
+```
+
+Copy the whole `release\PortableApplicationsServer` folder to another machine and run the
+executable — no Python or Node.js install is required. The `data\` folder (catalog database,
+managed apps, thumbnails, temp files) is always created **beside the exe**, never inside the
+bundle, so the folder stays self-contained and can be moved or backed up as a unit.
+
+`start.bat` remains the development launcher and runs the app from source.
