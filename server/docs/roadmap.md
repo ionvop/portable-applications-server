@@ -1,15 +1,14 @@
 ## Current state (verified)
 
-**Steps 1–5 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, ZIP building, a SPA fallback, and a client-facing catalog. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo` and `catalogEntries`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (50 checks).
+**Steps 1–6 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, ZIP building, a SPA fallback, a client-facing catalog, and a real transfer history. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (66 checks).
 
 **LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
 **Remaining functional gaps:**
-1. `TransfersView` and the Dashboard activity feed still render `mockData.ts` — no transfer or activity tables exist yet (Step 6).
-2. `archive_service.build_archive` runs synchronously inside the request — a 4 GB game means minutes of silence before the first byte, and no progress is observable (Step 7).
-3. `FilesView` actions (`Open in file explorer`, `Rescan`, `Storage`) are still inert (Step 8).
-4. No packaging spec yet, so the app only runs from source (Step 9).
-5. The client application does not exist; `/client` is a stopgap (Step 11).
+1. `archive_service.build_archive` runs synchronously inside the request — a 4 GB game means minutes of silence before the first byte, and no progress is observable (Step 7).
+2. `FilesView` actions (`Open in file explorer`, `Rescan`, `Storage`) are still inert (Step 8).
+3. No packaging spec yet, so the app only runs from source (Step 9).
+4. The client application does not exist; `/client` is a stopgap (Step 11).
 
 ---
 
@@ -66,13 +65,23 @@ Each step is independently shippable and verifiable. Don't start the next until 
 
 > **Note:** the `/client` page is a deliberate stopgap. It proves the LAN path works and gives clients something usable today, but it is not the client application. The real client app is deferred to Step 11 — the server is being finished first.
 
-### Step 6 — Make Transfers and Activity real
+### Step 6 — Make Transfers and Activity real ✅
 - Add a `transfers` table (`id, entry_id, client_ip, size_bytes, status, started_at, finished_at`) and an `activity` table, or derive activity from transfers.
 - Record a row in `distribution.download` before streaming, update on `call_on_close` (success) and on exception (failed).
 - New `GET /api/transfers` and `GET /api/activity`; replace the mock props in `TransfersView` and `DashboardView`.
 - Note: `progress` cannot be real with `send_file` — either drop the progress bar to "in progress" or move to Step 7's streaming approach.
 
 **Done when:** downloading from a client produces a visible transfer row that flips to `completed`.
+
+**Implemented:**
+- `db.SCHEMA` gains a `transfers` table (`entry_id` uses `ON DELETE SET NULL` so deleting an entry keeps its history) plus indexes on `status` and `started_at`; `models.Transfer` mirrors it.
+- New `backend/services/transfer_service.py`: `start_transfer`, `finish_transfer`, `list_transfers` (LEFT JOIN for the title), `list_activity` (derived from transfers + catalog timestamps — no second table), `reconcile_stale_transfers`, and `prune_transfers` (keeps the newest `config.TRANSFER_HISTORY_LIMIT` rows).
+- `distribution.download` records an `active` row before the first byte and marks it `completed`/`failed` when the stream ends. **`call_on_close` does not fire for `send_file`** (direct-passthrough bodies are never closed), so the archive is now streamed by a generator that finalizes the row and deletes the temp file in a `finally` block. This also fixed the previously silent archive-cleanup leak.
+- New `backend/api/transfers.py`: `GET /api/transfers` and `GET /api/activity`, both added to `ADMIN_API_PREFIXES` (they expose client IPs).
+- `main.py` / `dev_server.py` reconcile stale rows and prune history on startup.
+- Frontend: `types.ts` reshaped to `Transfer { entryId, entryTitle, client, sizeBytes, startedAt, finishedAt }` and `ActivityItem { occurredAt }`; `client.ts` maps the snake_case wire shapes; new `src/lib/format.ts` (`formatBytes`, `formatClock`, `formatRelativeTime`); `App.tsx` owns the data and polls every 2 s while Dashboard or Transfers is open; `mockData.ts` deleted.
+- Progress bars are now indeterminate ("In progress") — real percentages arrive with Step 7. `TransfersView` stats are computed from real rows.
+- `smoke_test.py` covers transfer recording, completion, activity shape, bad `limit`, and the admin guard (66 checks green).
 
 ### Step 7 — Non-blocking archive streaming
 - Replace `build_archive` + `send_file` with a generator that writes ZIP entries to the response as it walks the tree (or a background build with a `GET /api/distribution/:id/status` poll).
@@ -125,4 +134,4 @@ download ZIPs but cannot install or launch anything.
 
 If you want the shortest path to "feels like a real app": **Steps 1 → 2 → 3 → 4**. That alone turns the prototype into a working catalog manager. **Step 5** is the one-line-ish fix that makes the core promise (LAN distribution) actually true. Steps 6–8 add the observability the UI already pretends to have. Steps 9–10 are release work. **Step 11** is the separate client application, deliberately last so the server contract is stable before a second codebase depends on it.
 
-One caution: don't wire `TransfersView`'s progress bars (Step 6) before Step 7 — you'll build a fake progress model you then have to throw away.
+One caution: don't wire `TransfersView`'s progress bars before Step 7 — you'll build a fake progress model you then have to throw away. Step 6 therefore ships indeterminate bars; Step 7 replaces them with real byte counts.
