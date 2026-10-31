@@ -61,20 +61,28 @@ export interface BrowseResult {
 
 export type TransferStatus = "active" | "completed" | "failed"
 
+/** A ZIP download served to a client computer. */
 export interface Transfer {
   id: number
+  /** Catalog entry id, or null when the entry has since been deleted. */
+  entryId: number | null
   entryTitle: string
+  /** IP address of the downloading client. */
   client: string
-  sizeMb: number
-  progress: number
+  sizeBytes: number
   status: TransferStatus
+  /** ISO-8601 UTC timestamp. */
   startedAt: string
+  /** ISO-8601 UTC timestamp, or null while the transfer is active. */
+  finishedAt: string | null
 }
 
+/** One entry in the dashboard activity feed. */
 export interface ActivityItem {
-  id: number
+  id: string
   message: string
   detail: string
-  time: string
+  /** ISO-8601 UTC timestamp of when the event happened. */
+  occurredAt: string
   tone: "info" | "success" | "warning"
 }
