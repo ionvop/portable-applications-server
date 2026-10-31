@@ -34,3 +34,31 @@ class CatalogEntry:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(slots=True)
+class Transfer:
+    """A single ZIP download served to a client computer."""
+
+    id: int | None
+    entry_id: int | None
+    client_ip: str
+    size_bytes: int
+    status: str
+    started_at: str | None = None
+    finished_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> "Transfer":
+        return cls(
+            id=row["id"],
+            entry_id=row["entry_id"],
+            client_ip=row["client_ip"],
+            size_bytes=row["size_bytes"],
+            status=row["status"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
