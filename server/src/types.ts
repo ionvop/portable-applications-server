@@ -69,7 +69,10 @@ export interface Transfer {
   entryTitle: string
   /** IP address of the downloading client. */
   client: string
+  /** Total uncompressed size of the application being streamed. */
   sizeBytes: number
+  /** Uncompressed bytes streamed so far; equals `sizeBytes` when complete. */
+  bytesProcessed: number
   status: TransferStatus
   /** ISO-8601 UTC timestamp. */
   startedAt: string
