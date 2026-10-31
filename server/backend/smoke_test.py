@@ -128,6 +128,92 @@ def main() -> int:
     )
     check("bad thumbnail type rejected", response.status_code == 400, response.status_code)
 
+    print("reveal")
+    response = client.post("/api/files/reveal", json={"path": "../.."})
+    check("reveal traversal rejected", response.status_code == 400, response.status_code)
+
+    response = client.post("/api/files/reveal", json={"path": "does-not-exist"})
+    check("reveal missing folder 404", response.status_code == 404, response.status_code)
+
+    # Never actually launch Explorer during the test: record the call instead.
+    import os as os_module
+    import sys as sys_module
+
+    opened: list[str] = []
+    original_startfile = getattr(os_module, "startfile", None)
+    if sys_module.platform == "win32":
+        os_module.startfile = opened.append  # type: ignore[attr-defined]
+        try:
+            response = client.post("/api/files/reveal", json={"path": "smoke-app"})
+            check("reveal returns 200", response.status_code == 200, response.status_code)
+            check(
+                "reveal reports the absolute path",
+                response.get_json().get("revealed") == str(app_dir.resolve()),
+                response.get_json(),
+            )
+            check("reveal opened the folder", opened == [str(app_dir.resolve())], opened)
+        finally:
+            if original_startfile is None:
+                del os_module.startfile  # type: ignore[attr-defined]
+            else:
+                os_module.startfile = original_startfile  # type: ignore[attr-defined]
+    else:
+        response = client.post("/api/files/reveal", json={"path": "smoke-app"})
+        check("reveal unsupported off windows", response.status_code == 501, response.status_code)
+
+    print("storage")
+    response = client.get("/api/system/storage")
+    check("storage returns 200", response.status_code == 200, response.status_code)
+    storage = response.get_json()
+    check(
+        "storage shape",
+        set(storage) == {"apps", "thumbnails", "tmp", "total_bytes", "disk"},
+        sorted(storage),
+    )
+    check(
+        "storage folder shape",
+        set(storage["apps"]) == {"bytes", "files"},
+        sorted(storage["apps"]),
+    )
+    check(
+        "storage disk shape",
+        set(storage["disk"]) == {"total_bytes", "used_bytes", "free_bytes"},
+        sorted(storage["disk"]),
+    )
+
+    # The reported size must match a manual walk of the same folder.
+    expected_apps_bytes = sum(
+        path.stat().st_size for path in paths.apps_dir().rglob("*") if path.is_file()
+    )
+    expected_apps_files = sum(
+        1 for path in paths.apps_dir().rglob("*") if path.is_file()
+    )
+    check(
+        "storage apps bytes match the filesystem",
+        storage["apps"]["bytes"] == expected_apps_bytes,
+        (storage["apps"]["bytes"], expected_apps_bytes),
+    )
+    check(
+        "storage apps file count matches",
+        storage["apps"]["files"] == expected_apps_files,
+        (storage["apps"]["files"], expected_apps_files),
+    )
+    check(
+        "storage total is the sum of the folders",
+        storage["total_bytes"]
+        == storage["apps"]["bytes"]
+        + storage["thumbnails"]["bytes"]
+        + storage["tmp"]["bytes"],
+        storage["total_bytes"],
+    )
+    check(
+        "storage disk numbers are consistent",
+        storage["disk"]["total_bytes"]
+        == storage["disk"]["used_bytes"] + storage["disk"]["free_bytes"],
+        storage["disk"],
+    )
+    check("storage free space is positive", storage["disk"]["free_bytes"] > 0)
+
     print("distribution")
     response = client.get(f"/api/distribution/{entry_id}/download")
     check("download returns 200", response.status_code == 200, response.status_code)
@@ -302,12 +388,21 @@ def main() -> int:
     for path in (
         "/api/catalog",
         "/api/system/info",
+        "/api/system/storage",
         "/api/files/browse",
         "/api/transfers",
         "/api/activity",
     ):
         response = client.get(path, environ_base=remote)
         check(f"lan client blocked from {path}", response.status_code == 403, response.status_code)
+    response = client.post(
+        "/api/files/reveal", json={"path": ""}, environ_base=remote
+    )
+    check(
+        "lan client blocked from reveal",
+        response.status_code == 403,
+        response.status_code,
+    )
     response = client.get("/api/client/catalog", environ_base=remote)
     check("lan client allowed on client catalog", response.status_code == 200, response.status_code)
     response = client.get(
