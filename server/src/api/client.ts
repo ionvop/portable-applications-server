@@ -155,6 +155,7 @@ interface TransferResponse {
   entry_title: string
   client_ip: string
   size_bytes: number
+  bytes_processed: number
   status: TransferStatus
   started_at: string
   finished_at: string | null
@@ -178,6 +179,7 @@ export async function listTransfers(): Promise<Transfer[]> {
     entryTitle: row.entry_title,
     client: row.client_ip || "unknown",
     sizeBytes: row.size_bytes,
+    bytesProcessed: row.bytes_processed,
     status: row.status,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
