@@ -1,13 +1,12 @@
 ## Current state (verified)
 
-**Steps 1–7 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, and a real transfer history with live byte progress. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (78 checks).
+**Steps 1–8 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (96 checks).
 
 **LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
 **Remaining functional gaps:**
-1. `FilesView` actions (`Open in file explorer`, `Rescan`, `Storage`) are still inert (Step 8).
-2. No packaging spec yet, so the app only runs from source (Step 9).
-3. The client application does not exist; `/client` is a stopgap (Step 11).
+1. No packaging spec yet, so the app only runs from source (Step 9).
+2. The client application does not exist; `/client` is a stopgap (Step 11).
 
 ---
 
@@ -102,12 +101,21 @@ Each step is independently shippable and verifiable. Don't start the next until 
 
 > **Semantics change:** `size_bytes` is now the *uncompressed* source total rather than the compressed archive size, because it must be known before the archive exists. `bytes_processed` counts uncompressed bytes consumed, so progress reaches exactly 100%.
 
-### Step 8 — Files view actions
+### Step 8 — Files view actions ✅
 - `Open in file explorer` → new `POST /api/files/reveal` using `os.startfile` (Windows-only, guard it).
 - `Rescan directory` → just re-call `browse`.
 - `Storage` card → new `GET /api/system/storage` computing `apps/`, `thumbnails/`, `tmp/` sizes and free disk space via `shutil.disk_usage`.
 
 **Done when:** the storage numbers match the filesystem.
+
+**Implemented:**
+- `backend/api/files.py` extracts the traversal guard into `_resolve_inside_apps(relative)`, now shared by `browse` and the new `POST /api/files/reveal`. Reveal takes `{"path": ""}` relative to `data/apps`, answers 400 outside the apps folder and 404 for a missing directory, and returns `{"revealed": "<absolute path>"}`.
+- The platform guard is explicit: `sys.platform != "win32"` → 501 with a readable message, so a Linux/macOS run fails loudly instead of silently doing nothing. `os.startfile` failures surface as a 500 carrying the OS error text.
+- New `backend/services/storage_service.py`: `folder_usage(root)` walks with `rglob` and skips unreadable entries (a locked file in a running game cannot break the report); `get_storage()` returns `apps`, `thumbnails`, `tmp`, their `total_bytes`, and `disk` from `shutil.disk_usage(paths.data_dir())`.
+- New `GET /api/system/storage` in `backend/api/system.py`. Nothing is cached — the numbers are recomputed per request so they always match the filesystem.
+- Frontend: `StorageFolderUsage` / `StorageInfo` in `types.ts`; `revealPath()` and `getStorage()` in `client.ts` (the latter maps snake_case to camelCase like `listTransfers`).
+- `FilesView` now wires all three controls: reveal shows a spinner and an inline `alert-error` on failure, rescan bumps the existing `reloadKey` (which re-runs `browse` *and* refetches storage), and a new Storage card lists per-folder sizes with file counts, the managed total, and free disk space as a `<progress>` bar. The "Prototype only" note and the unimplemented `Verify archive integrity` button are gone.
+- `smoke_test.py` covers the reveal traversal/missing/platform paths (patching `os.startfile` so the test never opens Explorer), the storage payload shape, and asserts `apps.bytes`/`apps.files` equal a manual walk of `data/apps` (96 checks green).
 
 ### Step 9 — Packaging
 - Add a `pyinstaller.spec` bundling `dist` as data (`_MEIPASS`), with `paths.resource_root()` already handling it.
@@ -118,7 +126,7 @@ Each step is independently shippable and verifiable. Don't start the next until 
 **Done when:** the exe runs from a copied folder on a clean machine.
 
 ### Step 10 — Hardening
-- Extend `smoke_test.py` with transfer/activity/storage assertions.
+- Extend `smoke_test.py` with transfer/activity/storage assertions. *(transfer/activity/storage are already covered; the remaining work is the pytest wrapper and the UI toast.)*
 - Add a `pytest` wrapper so it runs in CI.
 - Add a global `ApiError` toast in the UI so failed requests are never silent.
 - Consider a shared-secret header for `/api/catalog` writes if clients share the network.
