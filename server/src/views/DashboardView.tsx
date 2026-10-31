@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { ActivityItem, CatalogEntry, SystemInfo, Transfer } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
+import { formatBytes, formatRelativeTime } from "../lib/format"
 import {
   CatalogIcon,
   ChevronRightIcon,
@@ -277,14 +278,12 @@ export function DashboardView({
                         {transfer.client}
                       </span>
                     </div>
-                    <progress
-                      className="progress progress-primary h-1.5"
-                      value={transfer.progress}
-                      max={100}
-                    />
+                    {/* ``send_file`` cannot report bytes sent, so the bar stays
+                        indeterminate until Step 7 adds real streaming. */}
+                    <progress className="progress progress-primary h-1.5" />
                     <div className="flex justify-between text-xs text-base-content/60">
-                      <span>{transfer.progress}%</span>
-                      <span>{transfer.sizeMb} MB</span>
+                      <span>In progress</span>
+                      <span>{formatBytes(transfer.sizeBytes)}</span>
                     </div>
                   </li>
                 ))}
@@ -309,7 +308,7 @@ export function DashboardView({
                     </p>
                   </div>
                   <span className="shrink-0 text-xs text-base-content/40">
-                    {item.time}
+                    {formatRelativeTime(item.occurredAt)}
                   </span>
                 </li>
               ))}
