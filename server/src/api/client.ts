@@ -13,6 +13,7 @@ import type {
   CatalogEntry,
   CatalogEntryInput,
   ClientCatalogEntry,
+  StorageInfo,
   SystemInfo,
   Transfer,
   TransferStatus,
@@ -106,6 +107,44 @@ export function deleteEntry(id: number): Promise<void> {
 export function browse(path = ""): Promise<BrowseResult> {
   const query = path ? `?path=${encodeURIComponent(path)}` : ""
   return request<BrowseResult>(`/files/browse${query}`)
+}
+
+/**
+ * Open a folder from the managed apps area in the server's file explorer.
+ *
+ * Windows-only: the backend answers 501 on other platforms.
+ */
+export function revealPath(path = ""): Promise<{ revealed: string }> {
+  return request<{ revealed: string }>("/files/reveal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  })
+}
+
+/** Wire shape returned by `GET /api/system/storage`. */
+interface StorageResponse {
+  apps: { bytes: number; files: number }
+  thumbnails: { bytes: number; files: number }
+  tmp: { bytes: number; files: number }
+  total_bytes: number
+  disk: { total_bytes: number; used_bytes: number; free_bytes: number }
+}
+
+/** Sizes of the managed folders and free space on the data volume. */
+export async function getStorage(): Promise<StorageInfo> {
+  const row = await request<StorageResponse>("/system/storage")
+  return {
+    apps: row.apps,
+    thumbnails: row.thumbnails,
+    tmp: row.tmp,
+    totalBytes: row.total_bytes,
+    disk: {
+      totalBytes: row.disk.total_bytes,
+      usedBytes: row.disk.used_bytes,
+      freeBytes: row.disk.free_bytes,
+    },
+  }
 }
 
 export function uploadThumbnail(
