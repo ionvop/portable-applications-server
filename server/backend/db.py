@@ -23,13 +23,14 @@ CREATE TABLE IF NOT EXISTS catalog (
 CREATE INDEX IF NOT EXISTS idx_catalog_title ON catalog (title);
 
 CREATE TABLE IF NOT EXISTS transfers (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    entry_id    INTEGER REFERENCES catalog (id) ON DELETE SET NULL,
-    client_ip   TEXT    NOT NULL DEFAULT '',
-    size_bytes  INTEGER NOT NULL DEFAULT 0,
-    status      TEXT    NOT NULL DEFAULT 'active',
-    started_at  TEXT    NOT NULL DEFAULT (datetime('now')),
-    finished_at TEXT
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_id        INTEGER REFERENCES catalog (id) ON DELETE SET NULL,
+    client_ip       TEXT    NOT NULL DEFAULT '',
+    size_bytes      INTEGER NOT NULL DEFAULT 0,
+    bytes_processed INTEGER NOT NULL DEFAULT 0,
+    status          TEXT    NOT NULL DEFAULT 'active',
+    started_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    finished_at     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_transfers_status ON transfers (status);
@@ -63,3 +64,28 @@ def init_db() -> None:
     """Create the schema if it does not exist yet. Safe to call repeatedly."""
     with get_connection() as connection:
         connection.executescript(SCHEMA)
+        _ensure_column(
+            connection,
+            table="transfers",
+            column="bytes_processed",
+            definition="INTEGER NOT NULL DEFAULT 0",
+        )
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    """Add a column to an existing table when it is missing.
+
+    ``CREATE TABLE IF NOT EXISTS`` never alters a table that already exists, so
+    databases created by an older version need an explicit migration.
+    """
+    existing = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
