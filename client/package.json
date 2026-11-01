@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": ".venv\\Scripts\\python.exe backend/dev_server.py",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
