@@ -14,6 +14,8 @@ export interface CatalogEntry {
   thumbnail: string
   directory: string
   executable: string
+  /** Published version, compared verbatim by clients to detect updates. */
+  version: string
   created_at: string | null
   updated_at: string | null
 }
@@ -25,6 +27,7 @@ export interface CatalogEntryInput {
   thumbnail: string
   directory: string
   executable: string
+  version: string
 }
 
 export interface SystemInfo {
@@ -38,6 +41,8 @@ export interface SystemInfo {
   lan_ip: string
   /** URL a client computer opens to browse the catalog. */
   client_url: string
+  /** UDP port the LAN discovery responder listens on. */
+  discovery_port: number
   data_dir: string
   apps_dir: string
   entry_count: number
@@ -51,6 +56,7 @@ export interface ClientCatalogEntry {
   title: string
   description: string
   thumbnail: string
+  version: string
 }
 
 export interface BrowseResult {
