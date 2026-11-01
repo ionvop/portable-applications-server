@@ -122,23 +122,33 @@ endpoint, so the client only learns the path for an application it is actually i
 
 ## Server contract required
 
-The client assumes the following endpoints on the Portable Applications Server. The first
-and last already exist; the middle two and the discovery responder are **not implemented in
-`../server` yet** and are the follow-up work.
+The client assumes the following endpoints on the Portable Applications Server. All four are
+implemented in `../server`.
 
 | Method | Path | Status |
 |---|---|---|
-| GET | `/api/client/catalog` | ✅ exists — `[{id, title, description, thumbnail}]` |
-| GET | `/api/client/catalog/<id>/manifest` | ⬜ needed — `{id, title, version, executable, size_bytes}` |
-| GET | `/api/distribution/<id>/download` | ✅ exists — ZIP stream |
-| UDP | broadcast on port 8758 | ⬜ needed — reply `{app, version, port}` |
-
-Until the manifest endpoint exists, `GET /api/catalog/<id>` and installs will fail with the
-server's 404. Until the discovery responder exists, `POST /api/settings/discover` returns a
-readable 404 and the user must set the address manually with `PUT /api/settings`.
+| GET | `/api/client/catalog` | ✅ `[{id, title, description, thumbnail, version}]` |
+| GET | `/api/client/catalog/<id>/manifest` | ✅ `{id, title, version, executable, size_bytes}` |
+| GET | `/api/distribution/<id>/download` | ✅ ZIP stream (chunked, no `Content-Length`) |
+| UDP | broadcast on port 8758 | ✅ replies `{app, version, port}` |
 
 The discovery probe payload is `b"PORTABLE_APPS_DISCOVER_V1"` sent to
-`255.255.255.255:8758`; the server should answer with JSON containing at least `port`.
+`255.255.255.255:8758`; the server replies with `{"app", "version", "port"}`. `port` is a JSON
+integer (a string or float is silently replaced with 8756 by `_parse_reply`). If the reply never
+arrives, `POST /api/settings/discover` returns a readable 404 and the address can still be set
+manually with `PUT /api/settings`.
+
+**Version-based updates:** `GET /api/client/catalog` carries `version`, and
+`api/catalog.py` sets `update_available` by comparing it with the installed version. The server
+treats `version` as a free-form change marker compared verbatim, so an installation is only
+refreshed after the administrator bumps it. A blank catalog version would disable update
+detection entirely, so the server always publishes one (default `1.0.0`).
+
+**Thumbnails:** the catalog's `thumbnail` is a bare filename. The server serves it from
+`GET /api/files/thumbnail/<name>`, which is reachable from the LAN, but it sends no CORS
+headers. The client UI will need a proxy route (or the server will need CORS) before it can
+render covers cross-origin.
+
 
 ## Security notes
 
