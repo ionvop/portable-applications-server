@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS catalog (
     thumbnail   TEXT    NOT NULL DEFAULT '',
     directory   TEXT    NOT NULL,
     executable  TEXT    NOT NULL,
+    version     TEXT    NOT NULL DEFAULT '1.0.0',
     created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -69,6 +70,14 @@ def init_db() -> None:
             table="transfers",
             column="bytes_processed",
             definition="INTEGER NOT NULL DEFAULT 0",
+        )
+        # Published version, compared verbatim by client computers to decide
+        # whether an installed copy needs re-downloading.
+        _ensure_column(
+            connection,
+            table="catalog",
+            column="version",
+            definition="TEXT NOT NULL DEFAULT '1.0.0'",
         )
 
 
