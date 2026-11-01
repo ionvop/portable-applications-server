@@ -39,6 +39,7 @@ const EMPTY_FORM: CatalogEntryInput = {
   thumbnail: "",
   directory: "",
   executable: "",
+  version: "1.0.0",
 }
 
 type FieldName = keyof CatalogEntryInput
@@ -51,6 +52,7 @@ function fieldForMessage(message: string): FieldName | null {
     return "directory"
   }
   if (text.includes("executable")) return "executable"
+  if (text.includes("version")) return "version"
   return null
 }
 
@@ -62,6 +64,7 @@ function toForm(entry: CatalogEntry | null): CatalogEntryInput {
     thumbnail: entry.thumbnail,
     directory: entry.directory,
     executable: entry.executable,
+    version: entry.version,
   }
 }
 
@@ -127,6 +130,7 @@ export function EntryDetailView({
       thumbnail: form.thumbnail,
       directory: form.directory,
       executable: form.executable,
+      version: form.version || "1.0.0",
       created_at: entry?.created_at ?? null,
       updated_at: entry?.updated_at ?? null,
     }),
@@ -371,6 +375,27 @@ export function EntryDetailView({
                   )}
                 </fieldset>
               </div>
+
+              <fieldset className="fieldset">
+                <legend className="fieldset-legend">Version</legend>
+                <input
+                  type="text"
+                  className={`input w-full font-mono text-xs sm:max-w-xs ${
+                    fieldErrors.version ? "input-error" : ""
+                  }`}
+                  value={form.version}
+                  onChange={(event) => update("version", event.target.value)}
+                  placeholder="1.0.0"
+                />
+                {fieldErrors.version ? (
+                  <p className="label text-error">{fieldErrors.version}</p>
+                ) : (
+                  <p className="label">
+                    Compared verbatim by clients: bump this after changing the
+                    files so installed copies re-download.
+                  </p>
+                )}
+              </fieldset>
 
               <fieldset className="fieldset">
                 <legend className="fieldset-legend">Thumbnail</legend>
