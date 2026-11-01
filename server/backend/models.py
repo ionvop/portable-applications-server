@@ -16,6 +16,7 @@ class CatalogEntry:
     thumbnail: str
     directory: str
     executable: str
+    version: str = "1.0.0"
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -28,6 +29,7 @@ class CatalogEntry:
             thumbnail=row["thumbnail"],
             directory=row["directory"],
             executable=row["executable"],
+            version=row["version"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
