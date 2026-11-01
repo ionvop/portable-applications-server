@@ -12,6 +12,12 @@ from typing import Any, Mapping
 from .. import db, paths
 from ..models import CatalogEntry
 
+#: Version published when an entry does not specify one.
+DEFAULT_VERSION = "1.0.0"
+
+#: Upper bound for the free-form version string.
+MAX_VERSION_LENGTH = 32
+
 
 class CatalogError(Exception):
     """Raised for invalid catalog input; translated to a 4xx by the API."""
@@ -45,8 +51,9 @@ def create_entry(payload: Mapping[str, Any]) -> CatalogEntry:
     with db.get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO catalog (title, description, thumbnail, directory, executable)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO catalog
+                (title, description, thumbnail, directory, executable, version)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 fields["title"],
@@ -54,6 +61,7 @@ def create_entry(payload: Mapping[str, Any]) -> CatalogEntry:
                 fields["thumbnail"],
                 fields["directory"],
                 fields["executable"],
+                fields["version"],
             ),
         )
         entry_id = int(cursor.lastrowid)
@@ -68,7 +76,8 @@ def update_entry(entry_id: int, payload: Mapping[str, Any]) -> CatalogEntry:
             """
             UPDATE catalog
                SET title = ?, description = ?, thumbnail = ?,
-                   directory = ?, executable = ?, updated_at = datetime('now')
+                   directory = ?, executable = ?, version = ?,
+                   updated_at = datetime('now')
              WHERE id = ?
             """,
             (
@@ -77,6 +86,7 @@ def update_entry(entry_id: int, payload: Mapping[str, Any]) -> CatalogEntry:
                 fields["thumbnail"],
                 fields["directory"],
                 fields["executable"],
+                fields["version"],
                 entry_id,
             ),
         )
@@ -110,12 +120,24 @@ def _validate(payload: Mapping[str, Any]) -> dict[str, str]:
     if Path(executable).is_absolute():
         raise CatalogError("The executable path must be relative to the directory.")
 
+    # ``version`` is compared verbatim by clients to detect updates, so it is a
+    # free-form string rather than a parsed semantic-version. A blank value
+    # would disable update detection entirely, so it falls back to the default.
+    version = str(payload.get("version", "")).strip() or DEFAULT_VERSION
+    if len(version) > MAX_VERSION_LENGTH:
+        raise CatalogError(
+            f"The version may not exceed {MAX_VERSION_LENGTH} characters."
+        )
+    if any(character in version for character in "\r\n\t"):
+        raise CatalogError("The version may not contain control characters.")
+
     return {
         "title": title,
         "description": str(payload.get("description", "")).strip(),
         "thumbnail": str(payload.get("thumbnail", "")).strip(),
         "directory": directory,
         "executable": executable,
+        "version": version,
     }
 
 
