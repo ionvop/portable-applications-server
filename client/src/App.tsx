@@ -1,121 +1,97 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react"
+import "./App.css"
+import type { CatalogApp, ThemeId, ViewId } from "./types"
+import { catalogApps, systemInfo, transfers } from "./data/mock"
+import { AppShell } from "./components/layout/AppShell"
+import { CatalogView } from "./views/CatalogView"
+import { AppDetailView } from "./views/AppDetailView"
+import { LibraryView } from "./views/LibraryView"
+import { DownloadsView } from "./views/DownloadsView"
+import { SettingsView } from "./views/SettingsView"
+
+/** Page heading shown above each screen. The detail view brings its own. */
+const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
+  catalog: {
+    title: "Store",
+    subtitle: "Games and applications available on the local network",
+  },
+  app: { title: "App details", subtitle: "Install and launch this application" },
+  library: {
+    title: "Library",
+    subtitle: "Everything installed on this computer, ready to launch",
+  },
+  downloads: {
+    title: "Downloads",
+    subtitle: "Transfer progress for applications coming from the server",
+  },
+  settings: {
+    title: "Settings",
+    subtitle: "Server connection, storage, and appearance",
+  },
+}
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [view, setView] = useState<ViewId>("catalog")
+  const [selectedApp, setSelectedApp] = useState<CatalogApp | null>(null)
+  const [theme, setTheme] = useState<ThemeId>("night")
+
+  // daisyUI reads the theme from the document element, so mirror state there.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme)
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme((current) => (current === "night" ? "light" : "night"))
+  }
+
+  const navigate = (next: ViewId) => {
+    if (next !== "app") setSelectedApp(null)
+    setView(next)
+  }
+
+  const openApp = (app: CatalogApp) => {
+    setSelectedApp(app)
+    setView("app")
+  }
+
+  const meta = pageMeta[view]
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <AppShell
+      activeView={view}
+      serverUrl={systemInfo.server_url}
+      version={systemInfo.version}
+      theme={theme}
+      onNavigate={navigate}
+      onToggleTheme={toggleTheme}
+    >
+      {view !== "app" && (
+        <header className="mb-5">
+          <h1 className="text-xl font-semibold leading-tight">{meta.title}</h1>
+          <p className="text-xs text-base-content/60">{meta.subtitle}</p>
+        </header>
+      )}
 
-      <div className="ticks"></div>
+      {view === "catalog" && <CatalogView apps={catalogApps} onOpenApp={openApp} />}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      {view === "app" && selectedApp && (
+        <AppDetailView app={selectedApp} onBack={() => navigate("catalog")} />
+      )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {view === "library" && (
+        <LibraryView
+          apps={catalogApps}
+          onOpenApp={openApp}
+          onBrowse={() => navigate("catalog")}
+        />
+      )}
+
+      {view === "downloads" && <DownloadsView transfers={transfers} />}
+
+      {view === "settings" && (
+        <SettingsView system={systemInfo} theme={theme} onToggleTheme={toggleTheme} />
+      )}
+    </AppShell>
   )
 }
 
