@@ -30,15 +30,25 @@ def main() -> int:
     transfer_service.reconcile_stale_transfers()
     transfer_service.prune_transfers()
 
+    # Keep the API and the discovery responder in step: a client that finds this
+    # machine during development behaves exactly as it will in production.
+    discovery = network_service.DiscoveryResponder()
+    if not discovery.start():
+        print(discovery.error, file=sys.stderr)
+
     lan_ip = network_service.get_lan_ip()
     print(f"API listening on http://{config.UI_HOST}:{config.PORT} (Ctrl+C to stop)")
     print(f"Client catalog: http://{lan_ip}:{config.PORT}/client")
-    create_app().run(
-        host=config.BIND_HOST,
-        port=config.PORT,
-        threaded=True,
-        use_reloader=False,
-    )
+    print(f"LAN discovery: UDP {config.DISCOVERY_PORT}")
+    try:
+        create_app().run(
+            host=config.BIND_HOST,
+            port=config.PORT,
+            threaded=True,
+            use_reloader=False,
+        )
+    finally:
+        discovery.stop()
     return 0
 
 
