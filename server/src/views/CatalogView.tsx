@@ -157,7 +157,12 @@ export function CatalogView({
               >
                 <Thumbnail entry={entry} className="h-32 w-full" />
                 <div className="card-body gap-2 p-4">
-                  <h3 className="card-title text-sm">{entry.title}</h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="card-title text-sm">{entry.title}</h3>
+                    <span className="badge badge-sm font-mono whitespace-nowrap">
+                      v{entry.version}
+                    </span>
+                  </div>
                   <p className="line-clamp-2 text-xs text-base-content/60">
                     {entry.description}
                   </p>
@@ -191,6 +196,7 @@ export function CatalogView({
             <thead>
               <tr>
                 <th>Title</th>
+                <th>Version</th>
                 <th>Directory</th>
                 <th>Executable</th>
                 <th>Updated</th>
@@ -212,6 +218,11 @@ export function CatalogView({
                       />
                       <span className="font-medium">{entry.title}</span>
                     </button>
+                  </td>
+                  <td>
+                    <span className="badge badge-ghost badge-sm font-mono">
+                      {entry.version}
+                    </span>
                   </td>
                   <td className="font-mono text-xs">{entry.directory}</td>
                   <td className="font-mono text-xs">{entry.executable}</td>
