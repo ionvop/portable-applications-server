@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import json
+import socket
 import sqlite3
 import sys
 import zipfile
@@ -12,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend import config, db, paths
 from backend.app import create_app
-from backend.services import archive_service, catalog_service
+from backend.services import archive_service, catalog_service, network_service
 
 failures: list[str] = []
 
@@ -23,6 +25,38 @@ def check(label: str, condition: bool, detail: str = "") -> None:
     else:
         failures.append(label)
         print(f"  FAIL  {label} {detail}")
+
+
+def _free_udp_port() -> int:
+    """Return a currently free UDP port on the loopback interface."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+    finally:
+        probe.close()
+
+
+def _probe_discovery(port: int, payload: bytes, timeout: float = 1.0) -> dict | None:
+    """Send ``payload`` to the discovery port and decode the JSON reply."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.settimeout(timeout)
+    try:
+        probe.sendto(payload, ("127.0.0.1", port))
+        while True:
+            try:
+                data, _address = probe.recvfrom(config.DISCOVERY_REPLY_MAX_BYTES)
+            except socket.timeout:
+                return None
+            try:
+                decoded = json.loads(data.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
+                continue
+            return decoded if isinstance(decoded, dict) else None
+    except OSError:
+        return None
+    finally:
+        probe.close()
 
 
 def main() -> int:
@@ -83,6 +117,11 @@ def main() -> int:
     entry = response.get_json()
     entry_id = entry["id"]
     check("create echoes title", entry["title"] == "Smoke App")
+    check(
+        "create defaults the version",
+        entry["version"] == "1.0.0",
+        entry.get("version"),
+    )
 
     response = client.get("/api/catalog")
     check("list contains entry", any(e["id"] == entry_id for e in response.get_json()))
@@ -96,10 +135,53 @@ def main() -> int:
             "title": "Smoke App Renamed",
             "directory": "smoke-app",
             "executable": "game.exe",
+            "version": "2.1.0",
         },
     )
-    check("update returns 200", response.status_code == 200)
+    check("update returns 200", response.status_code == 200, response.status_code)
     check("update applied", response.get_json()["title"] == "Smoke App Renamed")
+    check(
+        "update applies the version",
+        response.get_json()["version"] == "2.1.0",
+        response.get_json().get("version"),
+    )
+
+    response = client.put(
+        f"/api/catalog/{entry_id}",
+        json={
+            "title": "Smoke App Renamed",
+            "directory": "smoke-app",
+            "executable": "game.exe",
+            "version": "   ",
+        },
+    )
+    check(
+        "blank version falls back to the default",
+        response.get_json().get("version") == "1.0.0",
+        response.get_json().get("version"),
+    )
+
+    response = client.put(
+        f"/api/catalog/{entry_id}",
+        json={
+            "title": "Smoke App Renamed",
+            "directory": "smoke-app",
+            "executable": "game.exe",
+            "version": "x" * 64,
+        },
+    )
+    check("overlong version rejected", response.status_code == 400, response.status_code)
+
+    # Restore the version the client-contract checks below assert against.
+    client.put(
+        f"/api/catalog/{entry_id}",
+        json={
+            "title": "Smoke App Renamed",
+            "directory": "smoke-app",
+            "executable": "game.exe",
+            "version": "2.1.0",
+        },
+    )
 
     response = client.get("/api/catalog/999999")
     check("missing entry returns 404", response.status_code == 404, response.status_code)
@@ -213,6 +295,125 @@ def main() -> int:
         storage["disk"],
     )
     check("storage free space is positive", storage["disk"]["free_bytes"] > 0)
+
+    print("client contract")
+    response = client.get("/api/client/catalog")
+    check("client catalog returns 200", response.status_code == 200, response.status_code)
+    public_rows = response.get_json()
+    public_row = next((row for row in public_rows if row["id"] == entry_id), None)
+    check("client catalog lists the entry", public_row is not None, public_rows)
+    if public_row is not None:
+        check(
+            "client catalog field set",
+            set(public_row) == {"id", "title", "description", "thumbnail", "version"},
+            sorted(public_row),
+        )
+        check(
+            "client catalog exposes the version",
+            public_row["version"] == "2.1.0",
+            public_row.get("version"),
+        )
+        check(
+            "client catalog hides the directory",
+            "directory" not in public_row,
+            sorted(public_row),
+        )
+        check(
+            "client catalog hides the executable",
+            "executable" not in public_row,
+            sorted(public_row),
+        )
+
+    response = client.get(f"/api/client/catalog/{entry_id}")
+    check("client catalog entry returns 200", response.status_code == 200)
+
+    print("manifest")
+    response = client.get(f"/api/client/catalog/{entry_id}/manifest")
+    check("manifest returns 200", response.status_code == 200, response.status_code)
+    manifest = response.get_json()
+    check(
+        "manifest field set",
+        set(manifest) == {"id", "title", "version", "executable", "size_bytes"},
+        sorted(manifest),
+    )
+    check("manifest id", manifest["id"] == entry_id, manifest.get("id"))
+    check(
+        "manifest title",
+        manifest["title"] == "Smoke App Renamed",
+        manifest.get("title"),
+    )
+    check("manifest version", manifest["version"] == "2.1.0", manifest.get("version"))
+    check(
+        "manifest discloses the executable",
+        manifest["executable"] == "game.exe",
+        manifest.get("executable"),
+    )
+    check(
+        "manifest size matches the source total",
+        manifest["size_bytes"] == source_total,
+        (manifest["size_bytes"], source_total),
+    )
+
+    response = client.get("/api/client/catalog/999999/manifest")
+    check("manifest missing entry 404", response.status_code == 404, response.status_code)
+    missing = response.get_json()
+    check(
+        "manifest missing entry carries an error message",
+        isinstance(missing, dict) and "not found" in str(missing.get("error", "")).lower(),
+        missing,
+    )
+
+    # An entry whose directory has been removed must fail with a readable 404
+    # rather than a 500, because clients surface the message verbatim.
+    response = client.post(
+        "/api/catalog",
+        json={
+            "title": "Vanished App",
+            "directory": "vanished-app",
+            "executable": "missing.exe",
+        },
+    )
+    vanished_id = response.get_json()["id"]
+    response = client.get(f"/api/client/catalog/{vanished_id}/manifest")
+    check(
+        "manifest missing directory 404",
+        response.status_code == 404,
+        response.status_code,
+    )
+    client.delete(f"/api/catalog/{vanished_id}")
+
+    print("discovery")
+    # Bind an ephemeral port so the test never collides with a running server.
+    responder = network_service.DiscoveryResponder(port=_free_udp_port())
+    started = responder.start()
+    check("discovery responder starts", started, responder.error)
+    if started:
+        try:
+            reply = _probe_discovery(responder.port, config.DISCOVERY_MAGIC)
+            check("discovery answers the magic payload", reply is not None, reply)
+            if reply is not None:
+                check("discovery reply is a dict", isinstance(reply, dict), type(reply))
+                check("discovery reply has app", bool(reply.get("app")), reply)
+                check("discovery reply has version", bool(reply.get("version")), reply)
+                # The client validates with ``isinstance(port, int)``; a string
+                # or float would be silently discarded.
+                check(
+                    "discovery port is a JSON integer",
+                    isinstance(reply.get("port"), int),
+                    reply.get("port"),
+                )
+                check(
+                    "discovery port is the HTTP port",
+                    reply.get("port") == config.PORT,
+                    (reply.get("port"), config.PORT),
+                )
+            check(
+                "discovery ignores unrelated payloads",
+                _probe_discovery(responder.port, b"not-the-magic-payload") is None,
+            )
+        finally:
+            responder.stop()
+        check("discovery responder stops", not responder.running)
 
     print("distribution")
     response = client.get(f"/api/distribution/{entry_id}/download")
@@ -355,7 +556,7 @@ def main() -> int:
     if public_entry is not None:
         check(
             "client catalog exposes only public fields",
-            set(public_entry) == {"id", "title", "description", "thumbnail"},
+            set(public_entry) == {"id", "title", "description", "thumbnail", "version"},
             sorted(public_entry),
         )
         check(
