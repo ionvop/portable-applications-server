@@ -46,3 +46,17 @@ TRANSFER_STALE_SECONDS = 60 * 30
 
 # How many transfer rows to keep; older rows are pruned on startup.
 TRANSFER_HISTORY_LIMIT = 500
+
+# --- LAN discovery -----------------------------------------------------------
+
+#: UDP port the server listens on for discovery probes. Deliberately different
+#: from the HTTP ``PORT`` so the two never collide, and it is the client's
+#: ``DISCOVERY_PORT``.
+DISCOVERY_PORT = 8758
+
+#: Exact payload a client broadcasts to be recognised. Anything else is
+#: ignored so unrelated UDP traffic on this port is never answered.
+DISCOVERY_MAGIC = b"PORTABLE_APPS_DISCOVER_V1"
+
+#: Replies are a few dozen bytes; this bounds a single ``recvfrom``.
+DISCOVERY_REPLY_MAX_BYTES = 1024
