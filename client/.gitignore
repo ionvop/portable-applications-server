@@ -12,6 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.spec
+!pyinstaller.spec
+build/
+
+# PyInstaller output (build.bat)
+release/
+
+# Portable client data (install state, downloaded apps, settings)
+data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
