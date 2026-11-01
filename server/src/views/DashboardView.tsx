@@ -170,6 +170,10 @@ export function DashboardView({
                   <dd className="font-mono">{system.port}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
+                  <dt className="text-base-content/60">Discovery port</dt>
+                  <dd className="font-mono">{system.discovery_port}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
                   <dt className="text-base-content/60">Apps folder</dt>
                   <dd className="truncate font-mono">{system.apps_dir}</dd>
                 </div>
