@@ -21,7 +21,7 @@ from werkzeug.serving import make_server
 
 from . import config, db, paths
 from .app import create_app
-from .services import archive_service, transfer_service
+from .services import archive_service, network_service, transfer_service
 
 
 class ServerThread(threading.Thread):
@@ -64,12 +64,19 @@ def main() -> int:
         )
         return 1
 
+    # Clients find the server through this responder; a bind failure (firewall,
+    # port already taken) only disables auto-discovery, so it is not fatal.
+    discovery = network_service.DiscoveryResponder()
+    if not discovery.start():
+        print(discovery.error, file=sys.stderr)
+
     server = ServerThread(config.BIND_HOST, config.PORT)
     server.start()
 
     if not _wait_for_port(config.UI_HOST, config.PORT):
         print("The local server did not start in time.", file=sys.stderr)
         server.shutdown()
+        discovery.stop()
         return 1
 
     import webview  # imported late so the API can be tested without a GUI
@@ -84,6 +91,7 @@ def main() -> int:
     try:
         webview.start()
     finally:
+        discovery.stop()
         server.shutdown()
         server.join(timeout=5)
     return 0
