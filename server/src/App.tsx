@@ -50,6 +50,13 @@ const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
   },
 }
 
+/** Turn any thrown value into a message suitable for the error banner. */
+function describeError(cause: unknown): string {
+  if (cause instanceof ApiError) return `${cause.status}: ${cause.message}`
+  if (cause instanceof Error) return cause.message
+  return "Unable to reach the server."
+}
+
 function App() {
   const [view, setView] = useState<ViewId>("dashboard")
   const [selectedEntry, setSelectedEntry] = useState<CatalogEntry | null>(null)
@@ -79,13 +86,7 @@ function App() {
       setActivity(activityRows)
     } catch (cause: unknown) {
       if (signal?.aborted) return
-      setError(
-        cause instanceof ApiError
-          ? `${cause.status}: ${cause.message}`
-          : cause instanceof Error
-            ? cause.message
-            : "Unable to reach the server.",
-      )
+      setError(describeError(cause))
     } finally {
       if (!signal?.aborted) setLoading(false)
     }
@@ -97,29 +98,14 @@ function App() {
     return () => controller.abort()
   }, [load])
 
-  // Poll only while a view that displays live transfer data is open. Errors are
-  // ignored here so a transient failure never replaces the loaded data.
-  useEffect(() => {
-    if (!LIVE_VIEWS.has(view)) return
-
-    let cancelled = false
-    const timer = window.setInterval(() => {
-      void Promise.all([listTransfers(), listActivity()])
-        .then(([transferRows, activityRows]) => {
-          if (cancelled) return
-          setTransfers(transferRows)
-          setActivity(activityRows)
-        })
-        .catch(() => {
-          // Keep the last known data; the next tick retries.
-        })
-    }, POLL_INTERVAL_MS)
-
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
+  /** Re-read the server snapshot behind the dashboard's headline stats. */
+  const refreshSystemInfo = useCallback(async () => {
+    try {
+      setSystemInfo(await getSystemInfo())
+    } catch (cause: unknown) {
+      setError(describeError(cause))
     }
-  }, [view])
+  }, [])
 
   /** Re-read the catalog without touching the global loading/error banner. */
   const refreshEntries = useCallback(async () => {
@@ -130,15 +116,80 @@ function App() {
         current ? (catalog.find((item) => item.id === current.id) ?? null) : null,
       )
     } catch (cause: unknown) {
-      setError(
-        cause instanceof ApiError
-          ? `${cause.status}: ${cause.message}`
-          : cause instanceof Error
-            ? cause.message
-            : "Unable to reach the server.",
-      )
+      setError(describeError(cause))
     }
   }, [])
+
+  /** Re-read transfers and the activity feed derived from them. */
+  const refreshLiveData = useCallback(async () => {
+    const [transferRows, activityRows] = await Promise.all([
+      listTransfers(),
+      listActivity(),
+    ])
+    setTransfers(transferRows)
+    setActivity(activityRows)
+  }, [])
+
+  /**
+   * Re-read every value a catalog mutation can change. The dashboard's entry
+   * count lives on the system snapshot, the list on the catalog, and the feed
+   * on the transfer tables, so all three are refreshed together.
+   */
+  const refreshAfterMutation = useCallback(async () => {
+    try {
+      await Promise.all([
+        refreshSystemInfo(),
+        refreshEntries(),
+        refreshLiveData(),
+      ])
+    } catch {
+      // The individual refreshes report their own errors; a failure here must
+      // not stop the view from rendering the optimistic update.
+    }
+  }, [refreshEntries, refreshLiveData, refreshSystemInfo])
+
+  // Poll only while a view that displays live transfer data is open. The first
+  // tick runs immediately so switching views never shows rows that are up to
+  // one interval out of date. Errors are ignored here so a transient failure
+  // never replaces the loaded data.
+  useEffect(() => {
+    if (!LIVE_VIEWS.has(view)) return
+
+    const tick = () => {
+      void refreshLiveData().catch(() => {
+        // Keep the last known data; the next tick retries.
+      })
+    }
+
+    tick()
+    const timer = window.setInterval(tick, POLL_INTERVAL_MS)
+
+    return () => window.clearInterval(timer)
+  }, [view, refreshLiveData])
+
+  // Refresh the dashboard snapshot whenever it is opened. It is not polled:
+  // every request walks the catalog table and probes the LAN address, so it is
+  // read on demand instead of on every tick. Refreshing on entry keeps the
+  // entry count correct when the catalog changed outside this app.
+  useEffect(() => {
+    if (view !== "dashboard") return
+
+    let cancelled = false
+    void Promise.all([getSystemInfo(), listEntries()])
+      .then(([info, catalog]) => {
+        if (cancelled) return
+        setSystemInfo(info)
+        setEntries(catalog)
+      })
+      .catch(() => {
+        // Keep the last known data; the mutation refreshes and Retry cover the
+        // failure path.
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [view])
 
   const navigate = (next: ViewId) => {
     if (next !== "entry") {
@@ -161,10 +212,19 @@ function App() {
   }
 
   const handleSaved = (entry: CatalogEntry) => {
+    // Show the saved row immediately so the new entry is visible even if the
+    // refetch below fails. Sorting matches the server's ORDER BY title
+    // COLLATE NOCASE closely enough for the dashboard's recent list.
+    setEntries((current) => {
+      const next = current.some((item) => item.id === entry.id)
+        ? current.map((item) => (item.id === entry.id ? entry : item))
+        : [...current, entry]
+      return next.sort((a, b) => a.title.localeCompare(b.title))
+    })
     setSelectedEntry(entry)
     setIsCreating(false)
     setView("catalog")
-    void refreshEntries()
+    void refreshAfterMutation()
   }
 
   const handleDeleted = (id: number) => {
@@ -172,7 +232,7 @@ function App() {
     setSelectedEntry(null)
     setIsCreating(false)
     setView("catalog")
-    void refreshEntries()
+    void refreshAfterMutation()
   }
 
   const meta = pageMeta[view]
