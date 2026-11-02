@@ -50,6 +50,11 @@ def apps_dir() -> Path:
     return _ensure(data_dir() / config.APPS_DIR_NAME)
 
 
+def thumbnails_dir() -> Path:
+    """Cache of cover images proxied from the server."""
+    return _ensure(data_dir() / config.THUMBNAILS_DIR_NAME)
+
+
 def tmp_dir() -> Path:
     """Scratch space for in-flight downloads."""
     return _ensure(data_dir() / config.TMP_DIR_NAME)
