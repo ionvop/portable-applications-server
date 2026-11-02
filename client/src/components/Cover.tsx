@@ -1,3 +1,5 @@
+import { useState } from "react"
+
 const gradients = [
   "from-primary/70 to-secondary/70",
   "from-secondary/70 to-accent/70",
@@ -25,6 +27,8 @@ function initials(title: string): string {
 interface CoverSubject {
   id: number
   title: string
+  /** Bare filename from the catalog; empty when the entry has no artwork. */
+  thumbnail?: string
 }
 
 interface CoverProps {
@@ -35,25 +39,48 @@ interface CoverProps {
 }
 
 /**
- * Artwork tile with a deterministic gradient fallback.
- * The prototype never fetches images, so the fallback is the primary path.
+ * Artwork tile.
+ *
+ * The image is loaded through the client's own proxy (`/api/thumbnails/<name>`)
+ * because the server sends no CORS headers. The gradient is always painted
+ * underneath, so a missing, unreachable or broken cover degrades to the
+ * monogram instead of a broken-image icon.
  */
 export function Cover({ app, className = "", large = false }: CoverProps) {
   const gradient = gradients[app.id % gradients.length]
+  const thumbnail = app.thumbnail ?? ""
+  // Remember which source failed rather than a boolean, so a new thumbnail on
+  // the same tile is retried instead of inheriting the previous failure.
+  const [failedSource, setFailedSource] = useState<string | null>(null)
+
+  const showImage = thumbnail !== "" && failedSource !== thumbnail
 
   return (
     <div
-      className={`grid place-items-center bg-linear-to-br ${gradient} ${className}`}
+      className={`relative overflow-hidden bg-linear-to-br ${gradient} ${
+        showImage ? "" : "grid place-items-center"
+      } ${className}`}
       role="img"
       aria-label={`${app.title} cover art`}
     >
-      <span
-        className={`font-bold tracking-wide text-base-100/90 ${
-          large ? "text-6xl" : "text-2xl"
-        }`}
-      >
-        {initials(app.title)}
-      </span>
+      {showImage ? (
+        <img
+          src={`/api/thumbnails/${encodeURIComponent(thumbnail)}`}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover"
+          onError={() => setFailedSource(thumbnail)}
+        />
+      ) : (
+        <span
+          className={`font-bold tracking-wide text-base-100/90 ${
+            large ? "text-6xl" : "text-2xl"
+          }`}
+        >
+          {initials(app.title)}
+        </span>
+      )}
     </div>
   )
 }
