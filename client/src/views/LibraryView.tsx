@@ -1,6 +1,5 @@
 import type { CatalogApp } from "../types"
 import { Cover } from "../components/Cover"
-import { formatBytes, formatRelativeTime } from "../lib/format"
 import { DownloadIcon, LibraryIcon, PlayIcon, TrashIcon } from "../components/icons"
 
 interface LibraryViewProps {
@@ -47,11 +46,11 @@ export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
           </div>
         </div>
         <div className="stat">
-          <div className="stat-title text-xs">Disk used</div>
+          <div className="stat-title text-xs">Ready to launch</div>
           <div className="stat-value text-2xl">
-            {formatBytes(installed.reduce((total, app) => total + app.size_bytes, 0))}
+            {installed.filter((app) => !app.update_available).length}
           </div>
-          <div className="stat-desc">Across all installed apps</div>
+          <div className="stat-desc">Installed and up to date</div>
         </div>
       </div>
 
@@ -77,8 +76,7 @@ export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{app.title}</p>
                     <p className="truncate text-xs text-base-content/60">
-                      v{app.installed_version} · {formatBytes(app.size_bytes)} · updated{" "}
-                      {formatRelativeTime(app.updated_at)}
+                      v{app.installed_version}
                     </p>
                   </div>
                 </button>
