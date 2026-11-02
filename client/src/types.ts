@@ -5,6 +5,15 @@ export type ViewId = "catalog" | "app" | "library" | "downloads" | "settings"
 export type ThemeId = "night" | "light"
 
 /**
+ * How the client currently stands with the Portable Applications Server.
+ *
+ * Derived from local state rather than probed: `unconfigured` means no address
+ * is stored, `unreachable` means the catalog request failed, and `connected`
+ * means the last catalog fetch succeeded.
+ */
+export type ConnectionState = "connected" | "unreachable" | "unconfigured"
+
+/**
  * A catalog row as delivered by `GET /api/catalog`.
  *
  * The listing exposes only public display fields plus this machine's install
