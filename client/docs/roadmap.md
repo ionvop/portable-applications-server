@@ -1,6 +1,6 @@
 ## Current state (verified)
 
-**Steps 1–3 are done: the client renders a real server catalog and a real local library.**
+**Steps 1–4 are done: the client renders a real server catalog, a real local library, and real cover art.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
@@ -13,7 +13,7 @@
 
 1. **Install is synchronous.** `POST /api/apps/<id>/install` runs `ensure_installed` inline. A 4 GB game blocks the request for minutes with no progress — `install_service.ensure_installed` already accepts a `progress` callback that the API never passes.
 2. **No transfer/job endpoint.** `DownloadsView` has no data source; the client backend has no `transfers` table.
-3. **No thumbnail route.** The server serves `/api/files/thumbnail/<name>` without CORS, so the UI at `127.0.0.1:8757` cannot load covers cross-origin. `Cover.tsx` still renders only the gradient fallback.
+3. ~~**No thumbnail route.**~~ **Done in Step 4** — `GET /api/thumbnails/<name>` proxies and caches covers under `data/thumbnails/`, and `Cover.tsx` renders them with the gradient as fallback.
 4. **Write actions are inert.** `AppDetailView`'s install/verify buttons, `LibraryView`'s Play/trash, and `SettingsView`'s save/discover/test buttons do nothing yet.
 5. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
 
@@ -60,11 +60,20 @@ Each step is independently shippable. Don't start the next until the "done when"
 - `SettingsView` lost the invented "42% of the local storage quota" bar; it now reports the real `installed_count`.
 - Verified against a live server: catalog listed 3 entries, installing JoyToKey produced an install row, and stopping the server left `/api/apps/installed` working while `/api/catalog` returned 503.
 
-### Step 4 — Thumbnail proxy
+### Step 4 — Thumbnail proxy ✅
 - New `GET /api/thumbnails/<name>` in the client backend that fetches `{server_url}/api/files/thumbnail/<name>` and caches it under `data/thumbnails/`.
 - `Cover.tsx`: render `<img src={/api/thumbnails/${app.thumbnail}}>` when `thumbnail` is set, falling back to the existing gradient on `onError`.
 
 **Done when:** covers appear in the grid and detail hero.
+
+**Completed.** Notes on how it landed:
+
+- `backend/api/thumbnails.py` validates the name as a bare filename (no separators, `..` or drive colon → `400`), serves a cache hit with `max-age` of one year, and on a miss fetches through `server_client.fetch_thumbnail` and writes the file atomically (temp file + `os.replace`, the same pattern as `settings._write`).
+- `server_client.fetch_thumbnail` rejects non-`image/*` responses and anything over `config.MAX_THUMBNAIL_BYTES` (5 MB), and maps a server `404` to a `404` rather than a generic upstream error.
+- Caching is permanent by design: the server names uploads `uuid4().hex + suffix`, so a replaced cover always has a new filename and a cached entry can never be stale. No invalidation endpoint is needed, and `data/` is wiped by Deep Freeze anyway.
+- `Cover` remembers *which* source failed rather than a boolean, so a tile that gains a new thumbnail retries instead of inheriting the old failure. The gradient stays painted underneath, so a broken cover degrades to the monogram rather than a broken-image icon.
+- `LibraryView` now passes `entry?.thumbnail` into its row `Cover`; `CatalogView` and `AppDetailView` already passed the whole `CatalogApp`.
+- `smoke_test.py` gained a stub `/api/files/thumbnail/<name>` plus checks for the 200 round-trip, content type, on-disk cache, cache-hit short-circuit, traversal rejection and 404.
 
 ### Step 5 — Settings write path and discovery
 - `SettingsView`: controlled input; `Save` → `PUT /api/settings`; `Discover on LAN` → `POST /api/settings/discover`; `Test connection` → a new `POST /api/settings/test` that calls the server's `/api/health` through `server_client` (the browser cannot do this directly — no CORS on the server).
