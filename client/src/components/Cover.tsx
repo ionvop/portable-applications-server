@@ -1,5 +1,3 @@
-import type { CatalogApp } from "../types"
-
 const gradients = [
   "from-primary/70 to-secondary/70",
   "from-secondary/70 to-accent/70",
@@ -20,8 +18,17 @@ function initials(title: string): string {
     .join("")
 }
 
+/**
+ * The minimum a tile needs to render. Narrower than {@link CatalogApp} so an
+ * install row (which has no catalog entry) can still show a cover.
+ */
+interface CoverSubject {
+  id: number
+  title: string
+}
+
 interface CoverProps {
-  app: CatalogApp
+  app: CoverSubject
   className?: string
   /** Larger type for the detail-page hero. */
   large?: boolean
