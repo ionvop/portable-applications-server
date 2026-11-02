@@ -74,6 +74,7 @@ data/
 ├── client.db       SQLite install state (what is installed, at which version)
 ├── settings.json   server address and last discovery time
 ├── apps/           extracted applications and games
+├── thumbnails/     cached cover images proxied from the server
 └── tmp/            in-flight downloads (swept on startup)
 ```
 
@@ -98,6 +99,7 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 | GET | `/api/settings` | Stored settings |
 | PUT | `/api/settings` | Set `server_url` |
 | POST | `/api/settings/discover` | Broadcast a discovery probe and remember the reply |
+| GET | `/api/thumbnails/<name>` | Proxy and cache a cover image from the server |
 
 ### Catalog payload
 
@@ -146,8 +148,15 @@ detection entirely, so the server always publishes one (default `1.0.0`).
 
 **Thumbnails:** the catalog's `thumbnail` is a bare filename. The server serves it from
 `GET /api/files/thumbnail/<name>`, which is reachable from the LAN, but it sends no CORS
-headers. The client UI will need a proxy route (or the server will need CORS) before it can
-render covers cross-origin.
+headers, so the browser cannot load it cross-origin. `GET /api/thumbnails/<name>` closes that
+gap: it fetches the image through `server_client.fetch_thumbnail`, writes it atomically to
+`data/thumbnails/`, and serves it from the client's own origin. The UI uses
+`<img src="/api/thumbnails/<name>">` and falls back to the gradient monogram on `onError`.
+
+Caching is permanent (`max-age` one year) because the server names uploads with a random hex
+prefix: a replaced cover always arrives under a new filename, so a cached entry can never be
+stale. The route rejects anything that is not a bare filename (separators, `..`, drive
+letters) with `400`, and refuses responses that are not `image/*` or exceed 5 MB.
 
 
 ## Security notes
