@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -26,6 +27,9 @@ from . import discovery_service
 
 #: Called with ``(bytes_received, total_bytes_or_None)`` during a download.
 ProgressCallback = Callable[[int, "int | None"], None]
+
+#: Hard cap on a proxied cover image, so a hostile response cannot fill the disk.
+MAX_COVER_BYTES = config.MAX_THUMBNAIL_BYTES
 
 
 def get_catalog(server_url: str | None = None) -> list[CatalogEntry]:
@@ -46,6 +50,49 @@ def get_manifest(entry_id: int, server_url: str | None = None) -> dict[str, Any]
     if not isinstance(payload, dict):
         raise ClientError("The server returned an unexpected manifest payload.", 502)
     return payload
+
+
+def fetch_thumbnail(
+    name: str, server_url: str | None = None
+) -> tuple[bytes, str]:
+    """Fetch a cover image from the server.
+
+    Returns ``(body, content_type)``. The server serves covers from
+    ``/api/files/thumbnail/<name>`` without CORS headers, so the browser cannot
+    load them directly; the client proxies and caches them instead.
+    """
+    base = _base_url(server_url)
+    quoted = urllib.parse.quote(name, safe="")
+    request = urllib.request.Request(
+        f"{base}/api/files/thumbnail/{quoted}", headers={"Accept": "image/*"}
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=config.THUMBNAIL_TIMEOUT_SECONDS
+        ) as response:
+            content_type = response.headers.get("Content-Type") or ""
+            content_type = content_type.split(";")[0].strip()
+            if not content_type.startswith("image/"):
+                raise ValueError("not an image")
+            data = response.read(MAX_COVER_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        raise _thumbnail_http_error(exc) from exc
+    except urllib.error.URLError as exc:
+        raise ClientError(
+            f"Could not reach the server at {base}: {exc.reason}", status=503
+        ) from exc
+    except ValueError as exc:
+        raise ClientError(
+            "The server did not return an image for that thumbnail.", status=502
+        ) from exc
+    except OSError as exc:
+        raise ClientError(f"The thumbnail could not be read: {exc}", status=502) from exc
+
+    if len(data) > MAX_COVER_BYTES:
+        raise ClientError("The thumbnail is too large to cache.", status=502)
+    if not data:
+        raise ClientError("The server sent an empty thumbnail.", status=502)
+    return data, content_type
 
 
 def download_archive(
@@ -173,6 +220,13 @@ def _http_error(error: urllib.error.HTTPError) -> ClientError:
     # 4xx from the server is a client-visible problem; 5xx is upstream.
     status = error.code if 400 <= error.code < 500 else 502
     return ClientError(message, status=status)
+
+
+def _thumbnail_http_error(error: urllib.error.HTTPError) -> ClientError:
+    """Map a thumbnail HTTP failure, keeping 404 distinct from upstream errors."""
+    if error.code == 404:
+        return ClientError("That thumbnail does not exist on the server.", status=404)
+    return _http_error(error)
 
 
 def _remove_quietly(path: Path) -> None:
