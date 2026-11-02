@@ -26,6 +26,9 @@ DISCOVERY_TIMEOUT_SECONDS = 2.0
 # Timeout for ordinary JSON requests to the server.
 HTTP_TIMEOUT_SECONDS = 10.0
 
+# Timeout for a cover image. Covers are small, so a slow reply is a failure.
+THUMBNAIL_TIMEOUT_SECONDS = 15.0
+
 # Timeout for the archive download. Generous: a multi-gigabyte game over a
 # 100 Mbit LAN can legitimately take many minutes.
 DOWNLOAD_TIMEOUT_SECONDS = 60 * 60
@@ -34,8 +37,13 @@ DOWNLOAD_TIMEOUT_SECONDS = 60 * 60
 DATA_DIR_NAME = "data"
 APPS_DIR_NAME = "apps"
 TMP_DIR_NAME = "tmp"
+THUMBNAILS_DIR_NAME = "thumbnails"
 DB_FILE_NAME = "client.db"
 SETTINGS_FILE_NAME = "settings.json"
+
+# Upper bound on a proxied cover image. Covers are small; anything larger is
+# either a mistake or a hostile response, and is refused rather than cached.
+MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024
 
 # Location of the built frontend, relative to the resource root.
 WEB_DIR_NAME = "dist"
