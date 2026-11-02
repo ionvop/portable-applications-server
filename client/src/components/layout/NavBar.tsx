@@ -1,4 +1,5 @@
-import type { ThemeId, ViewId } from "../../types"
+import type { ConnectionState, ThemeId, ViewId } from "../../types"
+import { describeConnection } from "../../lib/connection"
 import {
   DownloadsIcon,
   GamepadIcon,
@@ -12,6 +13,7 @@ import {
 
 interface NavBarProps {
   activeView: ViewId
+  connection: ConnectionState
   serverUrl: string
   theme: ThemeId
   onNavigate: (view: ViewId) => void
@@ -28,11 +30,14 @@ const navItems: { id: ViewId; label: string; icon: typeof StoreIcon }[] = [
 /** Sidebar-free shell navigation: brand, primary tabs, status and theme toggle. */
 export function NavBar({
   activeView,
+  connection,
   serverUrl,
   theme,
   onNavigate,
   onToggleTheme,
 }: NavBarProps) {
+  const status = describeConnection(connection)
+
   return (
     <header className="shrink-0 border-b border-base-300 bg-base-200">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-6 py-3">
@@ -81,10 +86,12 @@ export function NavBar({
 
           <div
             className="hidden items-center gap-2 rounded-field bg-base-100 px-3 py-1.5 xl:flex"
-            title={`Connected server: ${serverUrl}`}
+            title={status.detail}
           >
-            <span className="status status-success" />
-            <span className="font-mono text-xs text-base-content/70">{serverUrl}</span>
+            <span className={`status ${status.dot}`} />
+            <span className="font-mono text-xs text-base-content/70">
+              {serverUrl || status.label}
+            </span>
           </div>
 
           <label className="swap swap-rotate btn btn-sm btn-ghost btn-circle">
