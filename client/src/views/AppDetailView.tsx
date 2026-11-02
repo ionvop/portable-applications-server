@@ -1,14 +1,11 @@
 import type { CatalogApp } from "../types"
 import { Cover } from "../components/Cover"
-import { formatBytes } from "../lib/format"
 import {
   ArrowLeftIcon,
   CheckIcon,
   DownloadIcon,
   PlayIcon,
   RefreshIcon,
-  SizeIcon,
-  TimeIcon,
 } from "../components/icons"
 
 interface AppDetailViewProps {
@@ -61,8 +58,7 @@ export function AppDetailView({ app, onBack }: AppDetailViewProps) {
                 <div className="min-w-0">
                   <h2 className="text-2xl font-semibold leading-tight">{app.title}</h2>
                   <p className="mt-1 text-xs text-base-content/60">
-                    {app.category === "games" ? "Game" : "Application"} ·{" "}
-                    <span className="font-mono">v{app.version}</span>
+                    {app.installed ? "Installed on this computer" : "Available from the server"}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -105,26 +101,18 @@ export function AppDetailView({ app, onBack }: AppDetailViewProps) {
               <h3 className="card-title text-sm">Details</h3>
               <dl className="flex flex-col gap-2 text-xs">
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="flex items-center gap-2 text-base-content/60">
-                    <SizeIcon width={14} height={14} />
-                    Download size
-                  </dt>
-                  <dd className="font-mono">{formatBytes(app.size_bytes)}</dd>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-base-content/60">Version</dt>
-                  <dd className="font-mono">{app.version}</dd>
-                </div>
-                <div className="flex items-center justify-between gap-3">
                   <dt className="text-base-content/60">Installed version</dt>
                   <dd className="font-mono">{app.installed_version || "—"}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="flex items-center gap-2 text-base-content/60">
-                    <TimeIcon width={14} height={14} />
-                    Updated
-                  </dt>
-                  <dd className="font-mono">{app.updated_at.slice(0, 10)}</dd>
+                  <dt className="text-base-content/60">Status</dt>
+                  <dd className="font-mono">
+                    {app.update_available
+                      ? "Update available"
+                      : app.installed
+                        ? "Up to date"
+                        : "Not installed"}
+                  </dd>
                 </div>
               </dl>
             </div>
@@ -138,12 +126,14 @@ export function AppDetailView({ app, onBack }: AppDetailViewProps) {
               </p>
               <div className="rounded-field bg-base-100 px-3 py-2">
                 <p className="text-xs text-base-content/40">Executable</p>
-                <p className="truncate font-mono text-xs">{app.executable}</p>
+                <p className="truncate font-mono text-xs">
+                  {app.installed ? "Resolved from the install record" : "—"}
+                </p>
               </div>
               <div className="rounded-field bg-base-100 px-3 py-2">
                 <p className="text-xs text-base-content/40">Directory</p>
                 <p className="truncate font-mono text-xs">
-                  data\apps\{app.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}
+                  {app.installed ? "Managed by the client" : "—"}
                 </p>
               </div>
             </div>
