@@ -1,21 +1,21 @@
 ## Current state (verified)
 
-**The Python side is essentially done; the React side is a mock-driven shell.**
+**Steps 1–3 are done: the client renders a real server catalog and a real local library.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
-- `vite.config.ts` already proxies `/api` → `127.0.0.1:8757`, and `npm run dev:api` exists. **The dev loop from the server's Step 1 is already in place.**
-- `App.tsx` imports `catalogApps`, `systemInfo`, `transfers` from `mock.ts`. Every button in `AppDetailView`, `LibraryView`, `DownloadsView`, and `SettingsView` is inert (several say so in the UI). `Cover.tsx` never renders an image. `AppShell` hardcodes "Connected".
+- `vite.config.ts` already proxies `/api` → `127.0.0.1:8757`, and `npm run dev:api` exists.
+- `types.ts` mirrors the wire exactly, and `src/api/client.ts` is the only fetch layer (`request<T>()`, `ApiError`, typed calls for all 11 endpoints).
+- `App.tsx` fetches `system`, `catalog`, `installs` and `settings` on mount, keeps `loading` / `systemError` / `catalogError` separate, and derives a `ConnectionState` (`connected` / `unreachable` / `unconfigured`) that the navbar, footer and Settings all render.
+- `CatalogView` filters `All` / `Installed` / `Updates` with title sort and search. `LibraryView` reads `GET /api/apps/installed` and shows `installed_at`. `SettingsView` renders the real `system` + `settings` payloads.
 
-**The gaps that matter, in order of how much they block:**
+**The gaps that remain:**
 
-1. **`types.ts` does not match the API.** `CatalogApp` declares `version`, `size_bytes`, `executable`, `category`, `updated_at` — the client's `/api/catalog` returns none of those. It returns `{id, title, description, thumbnail, installed, installed_version, update_available}`. `version`/`size_bytes`/`executable` only exist on `/api/catalog/<id>`.
-2. **No `src/api/` layer at all.** Nothing in `src` calls `fetch`.
-3. **Install is synchronous.** `POST /api/apps/<id>/install` runs `ensure_installed` inline. A 4 GB game blocks the request for minutes with no progress — `install_service.ensure_installed` already accepts a `progress` callback that the API never passes.
-4. **No transfer/job endpoint.** `DownloadsView` has no data source; the client backend has no `transfers` table.
-5. **No thumbnail route.** The server serves `/api/files/thumbnail/<name>` without CORS, so the UI at `127.0.0.1:8757` cannot load covers cross-origin. `README.md` flags this.
-6. **No error surface.** `ClientError` messages are well-written but nothing in the UI displays them.
-7. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
+1. **Install is synchronous.** `POST /api/apps/<id>/install` runs `ensure_installed` inline. A 4 GB game blocks the request for minutes with no progress — `install_service.ensure_installed` already accepts a `progress` callback that the API never passes.
+2. **No transfer/job endpoint.** `DownloadsView` has no data source; the client backend has no `transfers` table.
+3. **No thumbnail route.** The server serves `/api/files/thumbnail/<name>` without CORS, so the UI at `127.0.0.1:8757` cannot load covers cross-origin. `Cover.tsx` still renders only the gradient fallback.
+4. **Write actions are inert.** `AppDetailView`'s install/verify buttons, `LibraryView`'s Play/trash, and `SettingsView`'s save/discover/test buttons do nothing yet.
+5. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
 
 ---
 
@@ -29,7 +29,7 @@ Each step is independently shippable. Don't start the next until the "done when"
 
 **Done when:** `curl localhost:5173/api/health` returns `{"status":"ok"}` and the smoke test is green.
 
-### Step 2 — Align the TypeScript contract (no UI changes)
+### Step 2 — Align the TypeScript contract (no UI changes) ✅
 - Rewrite `types.ts` to mirror the wire shapes exactly:
   - `CatalogApp` → `{ id, title, description, thumbnail, installed, installed_version, update_available }`
   - New `CatalogDetail` → manifest fields (`version`, `executable`, `size_bytes`) + install state
@@ -41,7 +41,7 @@ Each step is independently shippable. Don't start the next until the "done when"
 
 **Done when:** `npm run build` passes and a temporary `console.log` in `App.tsx` prints real entries from a running server.
 
-### Step 3 — Wire the read-only views
+### Step 3 — Wire the read-only views ✅
 - `App.tsx`: replace the mock imports with `useEffect` + state for `systemInfo` and `catalog`; add `loading` / `error` states; pass them down.
 - `CatalogView`: **drop the `games`/`apps` category filter** — the server has no category field. Replace with `All` / `Installed` / `Updates`. Drop the `size` and `updated` sorts (no data); keep title sort and search.
 - `LibraryView`: source from `GET /api/apps/installed` rather than filtering the catalog — that survives an entry being deleted server-side. Use `installed_at` where the prototype used `updated_at`.
@@ -49,6 +49,16 @@ Each step is independently shippable. Don't start the next until the "done when"
 - `AppShell` / `NavBar`: real connection status instead of the hardcoded "Connected".
 
 **Done when:** the store renders a real server catalog, and the Library reflects `client.db`.
+
+**Completed.** Notes on how it landed:
+
+- `App.tsx` loads `system` first (it is the gate), then fetches `catalog`, `installs` and `settings` together with `Promise.allSettled`. A failed catalog fetch no longer blanks the shell: the Store shows an inline `ErrorNotice` with Retry while the Library and Settings keep working from local data. A failed `system` fetch is the only full-screen failure.
+- `ConnectionState` (`connected` / `unreachable` / `unconfigured`) is **derived**, not probed — there is no `/api/settings/test` until Step 5. `src/lib/connection.ts` maps each state to its label, dot and badge classes so the navbar, footer and Settings cannot drift apart.
+- An empty `server_url` short-circuits the catalog request instead of letting it 503, so the UI can say "No server set" rather than "Server unreachable".
+- `LibraryView` takes `installs` as its list source and uses the catalog only as a lookup for `update_available`. An install whose catalog entry was deleted server-side still renders, badged "Local only", and opens a synthesized detail view.
+- `Cover`'s prop was narrowed to `{ id, title }` so install rows render without fabricating a `CatalogApp`.
+- `SettingsView` lost the invented "42% of the local storage quota" bar; it now reports the real `installed_count`.
+- Verified against a live server: catalog listed 3 entries, installing JoyToKey produced an install row, and stopping the server left `/api/apps/installed` working while `/api/catalog` returned 503.
 
 ### Step 4 — Thumbnail proxy
 - New `GET /api/thumbnails/<name>` in the client backend that fetches `{server_url}/api/files/thumbnail/<name>` and caches it under `data/thumbnails/`.
