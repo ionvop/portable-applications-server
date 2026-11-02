@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import "./App.css"
-import type { CatalogApp, ThemeId, ViewId } from "./types"
-import { catalogApps, systemInfo, transfers } from "./data/mock"
+import type { CatalogApp, SystemInfo, ThemeId, ViewId } from "./types"
+import { ApiError, getCatalog, getSystemInfo } from "./api/client"
 import { AppShell } from "./components/layout/AppShell"
 import { CatalogView } from "./views/CatalogView"
 import { AppDetailView } from "./views/AppDetailView"
@@ -34,11 +34,37 @@ function App() {
   const [view, setView] = useState<ViewId>("catalog")
   const [selectedApp, setSelectedApp] = useState<CatalogApp | null>(null)
   const [theme, setTheme] = useState<ThemeId>("night")
+  const [system, setSystem] = useState<SystemInfo | null>(null)
+  const [catalog, setCatalog] = useState<CatalogApp[]>([])
+  const [error, setError] = useState<string | null>(null)
 
   // daisyUI reads the theme from the document element, so mirror state there.
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme)
   }, [theme])
+
+  // Load the client snapshot and the server catalog once on mount.
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      try {
+        const [info, apps] = await Promise.all([getSystemInfo(), getCatalog()])
+        if (cancelled) return
+        console.log("catalog", apps)
+        setSystem(info)
+        setCatalog(apps)
+      } catch (cause) {
+        if (cancelled) return
+        setError(cause instanceof ApiError ? cause.message : "Could not load the catalog.")
+      }
+    }
+
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const toggleTheme = () => {
     setTheme((current) => (current === "night" ? "light" : "night"))
@@ -56,11 +82,26 @@ function App() {
 
   const meta = pageMeta[view]
 
+  if (!system) {
+    return (
+      <div className="grid h-full place-items-center bg-base-100 text-base-content">
+        {error ? (
+          <div className="max-w-md text-center">
+            <p className="text-sm font-medium">The client backend is unreachable</p>
+            <p className="mt-1 text-xs text-base-content/60">{error}</p>
+          </div>
+        ) : (
+          <span className="loading loading-spinner loading-lg" aria-label="Loading" />
+        )}
+      </div>
+    )
+  }
+
   return (
     <AppShell
       activeView={view}
-      serverUrl={systemInfo.server_url}
-      version={systemInfo.version}
+      serverUrl={system.server_url}
+      version={system.version}
       theme={theme}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
@@ -72,24 +113,20 @@ function App() {
         </header>
       )}
 
-      {view === "catalog" && <CatalogView apps={catalogApps} onOpenApp={openApp} />}
+      {view === "catalog" && <CatalogView apps={catalog} onOpenApp={openApp} />}
 
       {view === "app" && selectedApp && (
         <AppDetailView app={selectedApp} onBack={() => navigate("catalog")} />
       )}
 
       {view === "library" && (
-        <LibraryView
-          apps={catalogApps}
-          onOpenApp={openApp}
-          onBrowse={() => navigate("catalog")}
-        />
+        <LibraryView apps={catalog} onOpenApp={openApp} onBrowse={() => navigate("catalog")} />
       )}
 
-      {view === "downloads" && <DownloadsView transfers={transfers} />}
+      {view === "downloads" && <DownloadsView />}
 
       {view === "settings" && (
-        <SettingsView system={systemInfo} theme={theme} onToggleTheme={toggleTheme} />
+        <SettingsView system={system} theme={theme} onToggleTheme={toggleTheme} />
       )}
     </AppShell>
   )
