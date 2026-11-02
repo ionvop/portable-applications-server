@@ -1,17 +1,30 @@
-import type { SystemInfo, ThemeId } from "../types"
+import type { ConnectionState, Settings, SystemInfo, ThemeId } from "../types"
+import { describeConnection } from "../lib/connection"
+import { formatRelativeTime } from "../lib/format"
 import { CheckIcon, RefreshIcon, SearchIcon, ServerIcon } from "../components/icons"
 
 interface SettingsViewProps {
   system: SystemInfo
+  settings: Settings
+  connection: ConnectionState
   theme: ThemeId
   onToggleTheme: () => void
 }
 
 /**
- * Connection and client info. Inputs and buttons are intentionally inert;
- * nothing is saved and no discovery request is made.
+ * Connection and client info, rendered from the real `system` and `settings`
+ * payloads. The address field and the connection buttons stay inert until the
+ * write path lands; nothing here is saved or probed.
  */
-export function SettingsView({ system, theme, onToggleTheme }: SettingsViewProps) {
+export function SettingsView({
+  system,
+  settings,
+  connection,
+  theme,
+  onToggleTheme,
+}: SettingsViewProps) {
+  const status = describeConnection(connection)
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <div className="card border border-base-300 bg-base-200">
@@ -23,23 +36,27 @@ export function SettingsView({ system, theme, onToggleTheme }: SettingsViewProps
                 Point the client at the computer hosting the Portable Applications Server.
               </p>
             </div>
-            <span className="badge badge-success badge-sm gap-1">
-              <span className="status status-success" />
-              Connected
+            <span className={`badge ${status.badge} badge-sm gap-1`}>
+              <span className={`status ${status.dot}`} />
+              {status.label}
             </span>
           </div>
+
+          <p className="text-xs text-base-content/60">{status.detail}</p>
 
           <fieldset className="fieldset">
             <legend className="fieldset-legend text-xs">Server address</legend>
             <input
               type="url"
               className="input input-sm w-full font-mono"
-              defaultValue={system.server_url}
+              defaultValue={settings.server_url}
               placeholder="http://192.168.1.10:8756"
               aria-label="Server address"
             />
             <p className="label text-xs text-base-content/50">
-              Leave blank to search the local network automatically.
+              {settings.discovered_at
+                ? `Last discovered ${formatRelativeTime(settings.discovered_at)}.`
+                : "Leave blank to search the local network automatically."}
             </p>
           </fieldset>
 
@@ -53,7 +70,7 @@ export function SettingsView({ system, theme, onToggleTheme }: SettingsViewProps
               Test connection
             </button>
             <span className="ml-auto text-xs text-base-content/40">
-              Prototype — nothing is saved.
+              Saving and discovery are not wired yet.
             </span>
           </div>
         </div>
@@ -100,8 +117,11 @@ export function SettingsView({ system, theme, onToggleTheme }: SettingsViewProps
               <p className="text-xs text-base-content/40">Applications directory</p>
               <p className="truncate font-mono text-xs">{system.apps_dir}</p>
             </div>
-            <progress className="progress progress-primary h-1.5" value={42} max={100} />
-            <p className="text-xs text-base-content/50">42% of the local storage quota in use.</p>
+            <p className="text-xs text-base-content/50">
+              {system.installed_count === 0
+                ? "No applications are stored yet."
+                : `${system.installed_count} application${system.installed_count === 1 ? "" : "s"} stored in this directory.`}
+            </p>
           </div>
         </div>
       </div>
