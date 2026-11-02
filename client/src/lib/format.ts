@@ -25,10 +25,29 @@ export function formatPercent(received: number, total: number): string {
 }
 
 /**
- * Renders an ISO timestamp as a short relative age ("just now", "3h ago").
+ * Parses a backend timestamp into epoch milliseconds.
+ *
+ * SQLite's `datetime('now')` produces `"YYYY-MM-DD HH:MM:SS"` in UTC with no
+ * `T` separator and no `Z` suffix. `new Date()` would read that as local time,
+ * so the string is normalized to ISO-8601 UTC first. Full ISO strings pass
+ * through untouched.
+ */
+function parseTimestamp(value: string): number {
+  const trimmed = value.trim()
+  if (!trimmed) return Number.NaN
+
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(trimmed)
+    ? `${trimmed.replace(" ", "T")}Z`
+    : trimmed
+
+  return new Date(normalized).getTime()
+}
+
+/**
+ * Renders a backend timestamp as a short relative age ("just now", "3h ago").
  */
 export function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
+  const then = parseTimestamp(iso)
   if (!Number.isFinite(then)) return "—"
 
   const seconds = Math.round((Date.now() - then) / 1000)
@@ -43,5 +62,5 @@ export function formatRelativeTime(iso: string): string {
   const days = Math.round(hours / 24)
   if (days < 30) return `${days}d ago`
 
-  return new Date(iso).toISOString().slice(0, 10)
+  return new Date(then).toISOString().slice(0, 10)
 }
