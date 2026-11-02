@@ -100,7 +100,11 @@ export function LibraryView({
                     onClick={() => (entry ? onOpenApp(entry) : onOpenInstall(install))}
                   >
                     <Cover
-                      app={{ id: install.entry_id, title: install.title }}
+                      app={{
+                        id: install.entry_id,
+                        title: install.title,
+                        thumbnail: entry?.thumbnail ?? "",
+                      }}
                       className="size-12 shrink-0 rounded-field"
                     />
                     <div className="min-w-0">
