@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
-import type { AppCategory, CatalogApp } from "../types"
+import type { CatalogApp } from "../types"
 import { Cover } from "../components/Cover"
-import { formatBytes } from "../lib/format"
 import { DownloadIcon, GridIcon, ListIcon, PlayIcon, SearchIcon } from "../components/icons"
 
 interface CatalogViewProps {
@@ -10,13 +9,12 @@ interface CatalogViewProps {
 }
 
 type Layout = "grid" | "table"
-type Filter = "all" | AppCategory | "installed"
+type Filter = "all" | "installed" | "updates"
 
 const filters: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "games", label: "Games" },
-  { id: "apps", label: "Apps" },
   { id: "installed", label: "Installed" },
+  { id: "updates", label: "Updates" },
 ]
 
 /** Storefront: browse the catalog, filter it, and open an app. */
@@ -24,14 +22,13 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
   const [layout, setLayout] = useState<Layout>("grid")
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
-  const [sort, setSort] = useState("title")
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
 
     const filtered = apps.filter((app) => {
       if (filter === "installed" && !app.installed) return false
-      if (filter !== "all" && filter !== "installed" && app.category !== filter) return false
+      if (filter === "updates" && !app.update_available) return false
       if (!needle) return true
       return (
         app.title.toLowerCase().includes(needle) ||
@@ -39,12 +36,8 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
       )
     })
 
-    return [...filtered].sort((a, b) => {
-      if (sort === "size") return b.size_bytes - a.size_bytes
-      if (sort === "updated") return b.updated_at.localeCompare(a.updated_at)
-      return a.title.localeCompare(b.title)
-    })
-  }, [apps, filter, query, sort])
+    return [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+  }, [apps, filter, query])
 
   return (
     <div className="flex flex-col gap-5">
@@ -58,17 +51,6 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-
-        <select
-          className="select select-sm w-44"
-          value={sort}
-          onChange={(event) => setSort(event.target.value)}
-          aria-label="Sort catalog"
-        >
-          <option value="title">Sort: Title</option>
-          <option value="updated">Sort: Last updated</option>
-          <option value="size">Sort: Largest first</option>
-        </select>
 
         <div className="join ml-auto">
           <button
@@ -137,13 +119,17 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
                 <div className="card-body gap-2 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="card-title text-sm">{app.title}</h3>
-                    <span className="badge badge-sm font-mono whitespace-nowrap">
-                      v{app.version}
-                    </span>
+                    {app.installed_version && (
+                      <span className="badge badge-sm font-mono whitespace-nowrap">
+                        v{app.installed_version}
+                      </span>
+                    )}
                   </div>
                   <p className="line-clamp-2 text-xs text-base-content/60">{app.description}</p>
                   <div className="mt-1 flex items-center justify-between gap-2 text-xs text-base-content/40">
-                    <span className="font-mono">{formatBytes(app.size_bytes)}</span>
+                    <span className="font-mono">
+                      {app.installed ? `v${app.installed_version}` : "Not downloaded"}
+                    </span>
                     {app.installed ? (
                       <span className="badge badge-success badge-sm gap-1">
                         <PlayIcon width={12} height={12} />
@@ -167,9 +153,7 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
             <thead>
               <tr>
                 <th>Title</th>
-                <th>Version</th>
-                <th>Size</th>
-                <th>Updated</th>
+                <th>Installed version</th>
                 <th className="text-right">Status</th>
               </tr>
             </thead>
@@ -187,10 +171,10 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
                     </button>
                   </td>
                   <td>
-                    <span className="badge badge-ghost badge-sm font-mono">{app.version}</span>
+                    <span className="badge badge-ghost badge-sm font-mono">
+                      {app.installed_version || "—"}
+                    </span>
                   </td>
-                  <td className="font-mono text-xs">{formatBytes(app.size_bytes)}</td>
-                  <td className="text-xs text-base-content/60">{app.updated_at.slice(0, 10)}</td>
                   <td className="text-right">
                     {app.update_available ? (
                       <span className="badge badge-warning badge-sm">Update</span>
