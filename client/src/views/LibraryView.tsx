@@ -1,19 +1,38 @@
-import type { CatalogApp } from "../types"
+import type { CatalogApp, Install } from "../types"
 import { Cover } from "../components/Cover"
+import { formatRelativeTime } from "../lib/format"
 import { DownloadIcon, LibraryIcon, PlayIcon, TrashIcon } from "../components/icons"
 
 interface LibraryViewProps {
-  apps: CatalogApp[]
+  /** Rows from `GET /api/apps/installed` — the source of truth for this screen. */
+  installs: Install[]
+  /** The server catalog, used only to look up update state. */
+  catalog: CatalogApp[]
   onOpenApp: (app: CatalogApp) => void
+  onOpenInstall: (install: Install) => void
   onBrowse: () => void
 }
 
-/** Installed applications, with update and removal affordances. */
-export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
-  const installed = apps.filter((app) => app.installed)
-  const updates = installed.filter((app) => app.update_available)
+/**
+ * Installed applications, read from the local install table rather than
+ * filtered out of the catalog: an entry deleted server-side still appears here
+ * as long as its files are on disk.
+ */
+export function LibraryView({
+  installs,
+  catalog,
+  onOpenApp,
+  onOpenInstall,
+  onBrowse,
+}: LibraryViewProps) {
+  const catalogById = new Map(catalog.map((app) => [app.id, app]))
 
-  if (installed.length === 0) {
+  /** The catalog entry for an install, when the server still lists it. */
+  const entryFor = (install: Install) => catalogById.get(install.entry_id)
+
+  const updates = installs.filter((install) => entryFor(install)?.update_available)
+
+  if (installs.length === 0) {
     return (
       <div className="card border border-dashed border-base-300 bg-base-200">
         <div className="card-body items-center gap-3 py-20 text-center">
@@ -35,7 +54,7 @@ export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
       <div className="stats stats-horizontal w-full border border-base-300 bg-base-200">
         <div className="stat">
           <div className="stat-title text-xs">Installed</div>
-          <div className="stat-value text-2xl">{installed.length}</div>
+          <div className="stat-value text-2xl">{installs.length}</div>
           <div className="stat-desc">Ready to launch</div>
         </div>
         <div className="stat">
@@ -47,9 +66,7 @@ export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
         </div>
         <div className="stat">
           <div className="stat-title text-xs">Ready to launch</div>
-          <div className="stat-value text-2xl">
-            {installed.filter((app) => !app.update_available).length}
-          </div>
+          <div className="stat-value text-2xl">{installs.length - updates.length}</div>
           <div className="stat-desc">Installed and up to date</div>
         </div>
       </div>
@@ -65,42 +82,63 @@ export function LibraryView({ apps, onOpenApp, onBrowse }: LibraryViewProps) {
           </div>
 
           <ul className="divide-y divide-base-300">
-            {installed.map((app) => (
-              <li key={app.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  onClick={() => onOpenApp(app)}
-                >
-                  <Cover app={app} className="size-12 shrink-0 rounded-field" />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{app.title}</p>
-                    <p className="truncate text-xs text-base-content/60">
-                      v{app.installed_version}
-                    </p>
-                  </div>
-                </button>
+            {installs.map((install) => {
+              const entry = entryFor(install)
+              const updateAvailable = entry?.update_available ?? false
+              const installedAt = install.installed_at
+                ? formatRelativeTime(install.installed_at)
+                : "—"
 
-                <div className="flex items-center gap-2">
-                  {app.update_available ? (
-                    <span className="badge badge-warning badge-sm">Update</span>
-                  ) : (
-                    <span className="badge badge-ghost badge-sm">Up to date</span>
-                  )}
-                  <button type="button" className="btn btn-sm btn-primary gap-2">
-                    <PlayIcon width={14} height={14} />
-                    Play
-                  </button>
+              return (
+                <li
+                  key={install.entry_id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-3"
+                >
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm btn-square"
-                    aria-label={`Remove ${app.title}`}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    onClick={() => (entry ? onOpenApp(entry) : onOpenInstall(install))}
                   >
-                    <TrashIcon width={16} height={16} />
+                    <Cover
+                      app={{ id: install.entry_id, title: install.title }}
+                      className="size-12 shrink-0 rounded-field"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{install.title}</p>
+                      <p className="truncate text-xs text-base-content/60">
+                        v{install.version} · installed {installedAt}
+                      </p>
+                    </div>
                   </button>
-                </div>
-              </li>
-            ))}
+
+                  <div className="flex items-center gap-2">
+                    {updateAvailable ? (
+                      <span className="badge badge-warning badge-sm">Update</span>
+                    ) : entry ? (
+                      <span className="badge badge-ghost badge-sm">Up to date</span>
+                    ) : (
+                      <span
+                        className="badge badge-ghost badge-sm"
+                        title="No longer listed on the server"
+                      >
+                        Local only
+                      </span>
+                    )}
+                    <button type="button" className="btn btn-sm btn-primary gap-2">
+                      <PlayIcon width={14} height={14} />
+                      Play
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm btn-square"
+                      aria-label={`Remove ${install.title}`}
+                    >
+                      <TrashIcon width={16} height={16} />
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         </div>
       </div>
