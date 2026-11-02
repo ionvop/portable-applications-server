@@ -7,6 +7,7 @@ exercised end to end.
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import shutil
@@ -48,6 +49,13 @@ ENTRY_ID = 7
 ENTRY_TITLE = "Smoke Game"
 ENTRY_VERSION = "1.0.0"
 ENTRY_EXECUTABLE = "bin/game.exe"
+THUMBNAIL_NAME = "cover.png"
+
+#: A 1x1 transparent PNG. Enough to prove the proxy round-trips bytes and
+#: preserves the content type.
+THUMBNAIL_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg=="
+)
 
 
 def _build_archive() -> bytes:
@@ -76,7 +84,7 @@ class StubHandler(BaseHTTPRequestHandler):
                         "id": ENTRY_ID,
                         "title": ENTRY_TITLE,
                         "description": "Test entry",
-                        "thumbnail": "",
+                        "thumbnail": THUMBNAIL_NAME,
                     }
                 ]
             )
@@ -96,6 +104,12 @@ class StubHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(ARCHIVE)))
             self.end_headers()
             self.wfile.write(ARCHIVE)
+        elif self.path == f"/api/files/thumbnail/{THUMBNAIL_NAME}":
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(THUMBNAIL_BYTES)))
+            self.end_headers()
+            self.wfile.write(THUMBNAIL_BYTES)
         elif self.path == "/api/client/catalog/999/manifest":
             self._json({"error": "Catalog entry 999 not found."}, status=404)
         else:
@@ -181,6 +195,42 @@ def main() -> int:
             "not found" in response.get_json()["error"].lower(),
             response.get_json(),
         )
+
+        print("thumbnails")
+        cached = paths.thumbnails_dir() / THUMBNAIL_NAME
+        cached.unlink(missing_ok=True)
+
+        response = client.get(f"/api/thumbnails/{THUMBNAIL_NAME}")
+        check("thumbnail proxy returns 200", response.status_code == 200, response.status_code)
+        check("thumbnail proxy serves the image", response.data == THUMBNAIL_BYTES)
+        check(
+            "thumbnail proxy keeps the content type",
+            response.headers.get("Content-Type", "").startswith("image/png"),
+            response.headers.get("Content-Type"),
+        )
+        check("thumbnail cached on disk", cached.is_file())
+
+        # A second request must be served from the cache, not the server.
+        original_fetch = server_client.fetch_thumbnail
+        fetches: list[str] = []
+
+        def counting_fetch(name, *args, **kwargs):
+            fetches.append(name)
+            return original_fetch(name, *args, **kwargs)
+
+        server_client.fetch_thumbnail = counting_fetch
+        try:
+            response = client.get(f"/api/thumbnails/{THUMBNAIL_NAME}")
+            check("cached thumbnail returns 200", response.status_code == 200)
+            check("cached thumbnail skips the server", fetches == [], fetches)
+        finally:
+            server_client.fetch_thumbnail = original_fetch
+
+        response = client.get("/api/thumbnails/..%2F..%2Fsettings.json")
+        check("thumbnail traversal rejected", response.status_code == 400, response.status_code)
+
+        response = client.get("/api/thumbnails/missing.png")
+        check("missing thumbnail returns 404", response.status_code == 404, response.status_code)
 
         print("install")
         response = client.post(f"/api/apps/{ENTRY_ID}/install")
@@ -296,6 +346,8 @@ def main() -> int:
         # Leave no state behind for the next run.
         shutil.rmtree(paths.apps_dir(), ignore_errors=True)
         paths.apps_dir()
+        shutil.rmtree(paths.thumbnails_dir(), ignore_errors=True)
+        paths.thumbnails_dir()
         for leftover in paths.tmp_dir().glob("*.zip"):
             leftover.unlink(missing_ok=True)
         state_service.remove_install(ENTRY_ID)
