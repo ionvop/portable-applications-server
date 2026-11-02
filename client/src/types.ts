@@ -1,45 +1,78 @@
-/** Every screen the client prototype can show. */
+/** Every screen the client can show. */
 export type ViewId = "catalog" | "app" | "library" | "downloads" | "settings"
 
 /** The two daisyUI themes declared in `index.css`. */
 export type ThemeId = "night" | "light"
 
-/** Catalog categories used for the storefront filter chips. */
-export type AppCategory = "games" | "apps"
-
 /**
- * A catalog row as delivered by the server, merged with local install state.
- * Mirrors `GET /api/catalog` in the Python backend.
+ * A catalog row as delivered by `GET /api/catalog`.
+ *
+ * The listing exposes only public display fields plus this machine's install
+ * state. Manifest fields (`version`, `executable`, `size_bytes`) are disclosed
+ * per entry by `GET /api/catalog/<id>` — see {@link CatalogDetail}.
  */
 export interface CatalogApp {
   id: number
   title: string
   description: string
   thumbnail: string
-  version: string
-  size_bytes: number
-  executable: string
-  category: AppCategory
   installed: boolean
   installed_version: string
   update_available: boolean
-  updated_at: string
 }
 
-/** Transfer states, ordered from pending to terminal. */
-export type TransferStatus = "queued" | "downloading" | "extracting" | "done" | "failed"
-
-/** One ZIP distribution job shown on the Downloads screen. */
-export interface Transfer {
+/**
+ * One catalog entry with its manifest fields, as delivered by
+ * `GET /api/catalog/<id>`.
+ *
+ * The backend does not compute `update_available` here; derive it by comparing
+ * `installed_version` with `version`.
+ */
+export interface CatalogDetail {
   id: number
   title: string
+  version: string
+  executable: string
+  size_bytes: number
+  installed: boolean
+  installed_version: string
+}
+
+/**
+ * A locally installed application, as delivered by `GET /api/apps/installed`
+ * and the install endpoint.
+ *
+ * `installed_at` is SQLite's `datetime('now')` format
+ * (`"YYYY-MM-DD HH:MM:SS"`, UTC, no `T` or `Z`), or `null` when unknown.
+ */
+export interface Install {
+  entry_id: number
+  title: string
   directory: string
-  status: TransferStatus
-  /** 0–100, already rounded for display. */
-  progress: number
-  received_bytes: number
-  total_bytes: number
-  started_at: string
+  executable: string
+  version: string
+  installed_at: string | null
+}
+
+/** Stored client settings, as delivered by `GET`/`PUT /api/settings`. */
+export interface Settings {
+  server_url: string
+  discovered_at: string
+}
+
+/** The reply from `POST /api/settings/discover`. */
+export interface DiscoveryReply {
+  server_url: string
+  app: string
+  version: string
+  host: string
+}
+
+/** The reply from `POST /api/apps/<id>/launch`. */
+export interface LaunchResult {
+  entry_id: number
+  pid: number
+  executable: string
 }
 
 /** Local client facts shown in the navbar and Settings screen. */
