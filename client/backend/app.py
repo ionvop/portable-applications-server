@@ -13,7 +13,7 @@ from __future__ import annotations
 from flask import Flask, jsonify, send_from_directory
 
 from . import paths
-from .api import apps, catalog, settings, system
+from .api import apps, catalog, settings, system, thumbnails
 from .errors import ClientError
 
 
@@ -31,6 +31,7 @@ def create_app() -> Flask:
     app.register_blueprint(catalog.bp)
     app.register_blueprint(apps.bp)
     app.register_blueprint(settings.bp)
+    app.register_blueprint(thumbnails.bp)
 
     @app.errorhandler(ClientError)
     def _handle_client_error(error: ClientError):
