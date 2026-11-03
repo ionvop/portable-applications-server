@@ -37,6 +37,48 @@ class CatalogEntry:
 
 
 @dataclass(slots=True)
+class Job:
+    """One install attempt, live or historical.
+
+    The wire shape is deliberately flat so the UI can render a progress bar
+    without knowing whether the job is still running: ``received_bytes`` and
+    ``total_bytes`` are meaningful in every state, and ``error`` is empty
+    unless ``status`` is ``failed``.
+
+    ``total_bytes`` is the archive size when the server sent a
+    ``Content-Length``, otherwise the manifest's uncompressed ``size_bytes``.
+    The two can disagree, so the UI clamps the ratio at 100%.
+    """
+
+    id: int
+    entry_id: int
+    title: str
+    status: str
+    received_bytes: int = 0
+    total_bytes: int = 0
+    error: str = ""
+    started_at: str | None = None
+    finished_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> "Job":
+        return cls(
+            id=row["id"],
+            entry_id=row["entry_id"],
+            title=row["title"],
+            status=row["status"],
+            received_bytes=row["bytes_processed"],
+            total_bytes=row["size_bytes"],
+            error=row["error"],
+            started_at=row["started_at"],
+            finished_at=row["finished_at"],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class Install:
     """A locally installed application or game."""
 
