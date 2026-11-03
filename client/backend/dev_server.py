@@ -21,12 +21,16 @@ if __package__ in (None, ""):
 
 from . import config, db
 from .app import create_app
-from .services import install_service
+from .services import install_service, job_service
 
 
 def main() -> int:
     db.init_db()
     install_service.sweep_stale_downloads()
+    # Worker threads do not survive a restart, so any row still marked running
+    # is a leftover from the previous process.
+    job_service.reconcile_stale_jobs()
+    job_service.prune_jobs()
 
     print(f"API listening on http://{config.UI_HOST}:{config.PORT} (Ctrl+C to stop)")
     create_app().run(
