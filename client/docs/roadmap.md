@@ -1,6 +1,6 @@
 ## Current state (verified)
 
-**Steps 1–5 are done: the client renders a real server catalog, a real local library, real cover art, and a working Settings write path.**
+**Steps 1–6 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, and installs that run in the background with live progress.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
@@ -11,8 +11,8 @@
 
 **The gaps that remain:**
 
-1. **Install is synchronous.** `POST /api/apps/<id>/install` runs `ensure_installed` inline. A 4 GB game blocks the request for minutes with no progress — `install_service.ensure_installed` already accepts a `progress` callback that the API never passes.
-2. **No transfer/job endpoint.** `DownloadsView` has no data source; the client backend has no `transfers` table.
+1. ~~**Install is synchronous.**~~ **Done in Step 6** — installs run on a worker thread and the request returns `202` immediately.
+2. ~~**No transfer/job endpoint.**~~ **Done in Step 6** — `GET /api/jobs` and `GET /api/jobs/<id>` read a `transfers` table that survives a restart.
 3. ~~**No thumbnail route.**~~ **Done in Step 4** — `GET /api/thumbnails/<name>` proxies and caches covers under `data/thumbnails/`, and `Cover.tsx` renders them with the gradient as fallback.
 4. **Write actions are inert.** `AppDetailView`'s install/verify buttons and `LibraryView`'s
    Play/trash do nothing yet. (`SettingsView`'s save/discover/test are wired as of Step 5.)
@@ -93,7 +93,7 @@ Each step is independently shippable. Don't start the next until the "done when"
 - Verified live: `PUT` wrote `data/settings.json`, `POST /api/settings/test` returned `{"status":"ok","server_url":"http://127.0.0.1:8756"}`, `POST /api/settings/discover` found the running server at `http://192.168.254.106:8756` and persisted `discovered_at`, and the address was still there after restarting the API.
 - `smoke_test.py` gained a stub `/api/health` plus nine checks: success, stored-URL fallback, bad URL, non-string body, dead port (503 + message), no URL at all (400), and that testing never persists.
 
-### Step 6 — Install as a background job with progress
+### Step 6 — Install as a background job with progress ✅
 This is the step that makes the app feel real.
 - New `backend/services/job_service.py`: an in-memory registry of `{id, entry_id, title, status, received_bytes, total_bytes, error}`; `POST /api/apps/<id>/install` starts a thread and returns `202` with the job; `GET /api/jobs` and `GET /api/jobs/<id>`.
 - Pass `install_service.ensure_installed(progress=...)` into the job so `received_bytes` advances.
@@ -101,10 +101,40 @@ This is the step that makes the app feel real.
 
 **Done when:** installing a large app returns immediately and the progress bar advances.
 
+**Completed.** Notes on how it landed:
+
+- Job ids **are** `transfers.id` values: the row is inserted before the thread starts, so the id
+  the API returns is the id the history will show and `GET /api/jobs/<id>` needs no lookup table.
+- Only *non-terminal* jobs live in memory. Terminal state is read from SQLite, which is why a
+  restart cannot resurrect a phantom progress bar: `reconcile_stale_jobs()` marks leftover
+  running rows `failed` on startup and `prune_jobs()` trims to `TRANSFER_HISTORY_LIMIT` (500).
+- `POST /api/apps/<id>/install` always answers `202` + job, even when the entry is already
+  current — the job simply completes without downloading. One response shape, no special case.
+- A second install request for an entry that is already installing returns the **running** job
+  instead of starting a competing download into the same directory.
+- `ensure_installed` gained `phase` and `on_manifest` callbacks. `phase` distinguishes
+  downloading from extracting; `on_manifest` lets the job adopt the real title as soon as the
+  server answers, so the bar is labelled while it runs rather than after it finishes.
+- **`total_bytes` is an estimate.** The server streams chunked with no `Content-Length`, so the
+  client falls back to the manifest's `size_bytes` — which is the *uncompressed* size and
+  therefore larger than the compressed archive. Live verification showed a bar stalling at 45%.
+  The UI now prefixes the total with `~` and clamps at 100%, and a completed job rewrites
+  `total_bytes` to the bytes actually transferred so history always reads 100%.
+- `DownloadsView` renders active jobs with a daisyUI `progress` bar plus a history list. `App.tsx`
+  polls `/api/jobs` every second **only while something is running**, and refetches `installs` +
+  `catalog` when a job leaves the active set, so the Library and Store update without a reload.
+- Verified live against the real server: `POST` returned in 233 ms with a `queued` job, the bar
+  advanced through `downloading` → `extracting` → `completed`, history survived an API restart,
+  and a hand-inserted `downloading` row was reconciled to `failed` on the next start.
+- `smoke_test.py` gained a `wait_for_job` poll helper and 22 checks: job shape, completion,
+  byte counts, duplicate-install reuse, partial progress observed mid-download, a failed job
+  carrying the server's message, and stale-row reconciliation.
+
 ### Step 7 — Wire the write actions
 - `AppDetailView`: primary button → install (or launch when current); `Verify files` → `POST install {"force": true}`; show the job's progress inline. Replace the client-side `data\apps\<slug>` guess with the install row's real `directory`.
 - `LibraryView`: `Play` → `POST /api/apps/<id>/launch`; trash → confirm + `DELETE`.
-- `DownloadsView`: real active jobs + persisted history.
+- ~~`DownloadsView`: real active jobs + persisted history.~~ **Done in Step 6** — the screen
+  renders live progress and history; Step 7 only needs to add per-job actions if wanted.
 
 **Done when:** install → launch → remove round-trips through the UI.
 
@@ -115,7 +145,9 @@ This is the step that makes the app feel real.
 **Done when:** stopping the server produces a readable message instead of a blank screen.
 
 ### Step 9 — Refresh behaviour
-- Poll `/api/jobs` while Downloads is open; refetch the catalog when an install completes; refetch on window focus.
+- ~~Poll `/api/jobs` while Downloads is open; refetch the catalog when an install completes.~~
+  **Done in Step 6** — `App.tsx` polls only while a job is active and refreshes `installs` +
+  `catalog` when one finishes. Remaining: refetch on window focus.
 - Either wire the `NavBar` search box to the catalog query or remove it (it currently duplicates `CatalogView`'s search).
 
 **Done when:** the Library updates without a manual reload.
@@ -140,5 +172,7 @@ This is the step that makes the app feel real.
 
 Two cautions:
 
-- **Don't wire `DownloadsView` before Step 6.** The prototype's `Transfer` shape (`progress`, `received_bytes`, `total_bytes`, `directory`) is invented; building against it means throwing it away. Step 6 defines the real shape.
+- ~~**Don't wire `DownloadsView` before Step 6.**~~ Resolved: Step 6 defined the real `Job` shape
+  (`id`, `entry_id`, `title`, `status`, `received_bytes`, `total_bytes`, `error`, timestamps) and
+  `DownloadsView` is built against it.
 - **Two prototype features have no backend and need a decision, not code:** the `games`/`apps` category filter (the server publishes no category) and the per-card size/updated columns (only available per-entry via the manifest, which costs one `plan_archive` walk each). Dropping them from the grid and showing size on the detail page is the cheap path; adding `category` and `size_bytes` to the server's public catalog is the cross-repo path.
