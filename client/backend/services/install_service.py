@@ -30,22 +30,36 @@ from . import server_client, state_service
 #: Called with ``(bytes_received, total_bytes_or_None)`` during a download.
 ProgressCallback = Callable[[int, "int | None"], None]
 
+#: Called with a coarse phase name: ``"downloading"`` then ``"extracting"``.
+PhaseCallback = Callable[[str], None]
+
+#: Called with the manifest once the server answers, before any transfer starts.
+ManifestCallback = Callable[[dict[str, Any]], None]
+
 
 def ensure_installed(
     entry_id: int,
     server_url: str | None = None,
     progress: ProgressCallback | None = None,
     force: bool = False,
+    phase: PhaseCallback | None = None,
+    on_manifest: ManifestCallback | None = None,
 ) -> Install:
     """Make sure ``entry_id`` is installed and current; return its install row.
 
     ``force`` re-downloads even when the recorded version matches, which the UI
-    uses for a "Repair" action.
+    uses for a "Repair" action. ``phase`` reports the coarse stage so a
+    background job can distinguish downloading from extracting, and
+    ``on_manifest`` hands the manifest over as soon as it arrives so a job can
+    show the real title while the download is still running.
     """
     manifest = server_client.get_manifest(entry_id, server_url)
     title = str(manifest.get("title") or f"Application {entry_id}")
     version = str(manifest.get("version") or "")
     executable = str(manifest.get("executable") or "")
+
+    if on_manifest is not None:
+        on_manifest(manifest)
 
     existing = state_service.get_install(entry_id)
     if not force and existing is not None and _is_current(existing, version):
@@ -55,8 +69,18 @@ def ensure_installed(
     target = paths.apps_dir() / slug
     archive = paths.tmp_dir() / f"{slug}-{entry_id}.zip"
 
+    # The server streams the archive chunked, so ``Content-Length`` is usually
+    # absent. The manifest's uncompressed size is the best available estimate
+    # and keeps the progress bar meaningful instead of indeterminate.
+    fallback_total = _manifest_size(manifest)
+    reported = _with_fallback_total(progress, fallback_total)
+
     try:
-        server_client.download_archive(entry_id, archive, server_url, progress)
+        if phase is not None:
+            phase("downloading")
+        server_client.download_archive(entry_id, archive, server_url, reported)
+        if phase is not None:
+            phase("extracting")
         _extract(archive, target)
     finally:
         _remove_quietly(archive)
@@ -96,6 +120,28 @@ def sweep_stale_downloads() -> int:
         except OSError:
             continue
     return removed
+
+
+def _manifest_size(manifest: dict[str, Any]) -> int:
+    """Read the manifest's ``size_bytes`` as a non-negative int, or ``0``."""
+    raw = manifest.get("size_bytes")
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _with_fallback_total(
+    progress: ProgressCallback | None, fallback_total: int
+) -> ProgressCallback | None:
+    """Substitute ``fallback_total`` whenever the download reports no total."""
+    if progress is None or fallback_total <= 0:
+        return progress
+
+    def report(received: int, total: "int | None") -> None:
+        progress(received, total if total else fallback_total)
+
+    return report
 
 
 def _is_current(install: Install, version: str) -> bool:
