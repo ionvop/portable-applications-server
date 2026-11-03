@@ -98,6 +98,7 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 | DELETE | `/api/apps/<id>` | Remove the install row and its directory |
 | GET | `/api/settings` | Stored settings |
 | PUT | `/api/settings` | Set `server_url` |
+| POST | `/api/settings/test` | Probe a server's `/api/health` (read-only; optional `{"server_url": …}`) |
 | POST | `/api/settings/discover` | Broadcast a discovery probe and remember the reply |
 | GET | `/api/thumbnails/<name>` | Proxy and cache a cover image from the server |
 
@@ -188,14 +189,16 @@ project root. The spec produces an **onedir** bundle in `release\PortableApplica
 frozen, so the first run creates `data\client.db` beside the exe. Copying the release folder
 therefore carries no stale state.
 
-## Frontend wiring (TODO)
+## Frontend wiring
 
-The Python side is complete; `src/App.tsx` is still the Vite starter template. To wire it:
+The Python side is complete and the React UI is wired to it. Remaining work:
 
-1. Add `src/api/client.ts` with a `request<T>()` wrapper and typed calls for the endpoints
-   above.
-2. Replace the starter UI with a catalog grid: thumbnail, title, description, and an
-   Install / Play / Update button driven by `installed` and `update_available`.
-3. Add a Settings view backed by `GET`/`PUT /api/settings` and `POST /api/settings/discover`.
+1. ~~Add `src/api/client.ts` with a `request<T>()` wrapper and typed calls for the endpoints
+   above.~~ **Done.**
+2. ~~Replace the starter UI with a catalog grid: thumbnail, title, description, and an
+   Install / Play / Update button driven by `installed` and `update_available`.~~ **Done.**
+3. ~~Add a Settings view backed by `GET`/`PUT /api/settings` and `POST /api/settings/discover`.~~
+   **Done** — `SettingsView` saves, discovers and tests the address, and surfaces
+   `ClientError` messages inline.
 4. Show install progress — `POST /api/apps/<id>/install` is synchronous today; add a
    progress endpoint or a server-sent-events stream if the UI needs a live bar.
