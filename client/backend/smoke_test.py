@@ -77,7 +77,9 @@ class StubHandler(BaseHTTPRequestHandler):
         """Silence request logging."""
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        if self.path == "/api/client/catalog":
+        if self.path == "/api/health":
+            self._json({"status": "ok"})
+        elif self.path == "/api/client/catalog":
             self._json(
                 [
                     {
@@ -174,6 +176,50 @@ def main() -> int:
             response.get_json(),
         )
         settings.set_server_url(server_url)  # restore for the rest of the run
+
+        print("settings/test")
+        response = client.post("/api/settings/test", json={"server_url": server_url})
+        check("test connection returns 200", response.status_code == 200, response.status_code)
+        check(
+            "test connection reports ok",
+            response.get_json() == {"status": "ok", "server_url": server_url},
+            response.get_json(),
+        )
+
+        # An empty body must fall back to the stored address.
+        response = client.post("/api/settings/test")
+        check("test connection uses stored url", response.status_code == 200, response.status_code)
+
+        response = client.post("/api/settings/test", json={"server_url": "not a url"})
+        check("test connection rejects bad url", response.status_code == 400, response.status_code)
+
+        response = client.post("/api/settings/test", json={"server_url": 42})
+        check("test connection rejects non-string", response.status_code == 400, response.status_code)
+
+        # A closed port must surface the unreachable message, not a crash.
+        response = client.post(
+            "/api/settings/test", json={"server_url": "http://127.0.0.1:1"}
+        )
+        check("test connection dead port returns 503", response.status_code == 503, response.status_code)
+        check(
+            "test connection dead port explains itself",
+            "could not reach" in response.get_json()["error"].lower(),
+            response.get_json(),
+        )
+
+        # With nothing stored and nothing supplied there is nothing to probe.
+        settings.set_server_url("")
+        response = client.post("/api/settings/test")
+        check("test connection without url returns 400", response.status_code == 400, response.status_code)
+        settings.set_server_url(server_url)
+
+        # Testing must never persist: the stored address is unchanged.
+        client.post("/api/settings/test", json={"server_url": "http://10.0.0.9:8756"})
+        check(
+            "test connection does not persist",
+            settings.get_server_url() == server_url,
+            settings.get_server_url(),
+        )
 
         print("catalog")
         response = client.get("/api/catalog")
