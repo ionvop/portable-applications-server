@@ -93,9 +93,11 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 | GET | `/api/catalog` | Server catalog annotated with local install state |
 | GET | `/api/catalog/<id>` | One entry, including the manifest fields |
 | GET | `/api/apps/installed` | Applications installed on this machine |
-| POST | `/api/apps/<id>/install` | Download and extract (`{"force": true}` to re-download) |
+| POST | `/api/apps/<id>/install` | Start a background install job (`202`; `{"force": true}` to re-download) |
 | POST | `/api/apps/<id>/launch` | Start the installed application |
 | DELETE | `/api/apps/<id>` | Remove the install row and its directory |
+| GET | `/api/jobs` | Active install jobs first, then finished history |
+| GET | `/api/jobs/<id>` | One job, live or historical |
 | GET | `/api/settings` | Stored settings |
 | PUT | `/api/settings` | Set `server_url` |
 | POST | `/api/settings/test` | Probe a server's `/api/health` (read-only; optional `{"server_url": …}`) |
@@ -122,6 +124,51 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 
 `executable` is **not** part of the listing. It is disclosed per entry by the manifest
 endpoint, so the client only learns the path for an application it is actually installing.
+
+### Install jobs
+
+`POST /api/apps/<id>/install` does **not** wait for the download. It records a row, starts a
+worker thread and answers `202` with the job, so a multi-gigabyte game never blocks the
+request:
+
+```json
+{
+  "id": 19,
+  "entry_id": 22,
+  "title": "JoyToKey",
+  "status": "downloading",
+  "received_bytes": 827976,
+  "total_bytes": 1850501,
+  "error": "",
+  "started_at": "2026-11-03 01:27:47",
+  "finished_at": null
+}
+```
+
+`status` moves through `queued` → `downloading` → `extracting` → `completed`, or ends at
+`failed` with `error` set to the message the UI shows verbatim. Installing an entry that is
+already installing returns the **running** job rather than starting a second download into the
+same folder.
+
+`total_bytes` is an estimate. The server streams the archive chunked, so there is no
+`Content-Length`; the client falls back to the manifest's `size_bytes`, which is the
+*uncompressed* size and therefore larger than the compressed archive. The UI prefixes it with
+`~` and clamps the bar at 100%. A completed job rewrites `total_bytes` to the bytes actually
+transferred, so history always reads 100%.
+
+Jobs are polled (`GET /api/jobs`), not streamed: the client is a single-window desktop app and
+a one-second poll is simpler than an SSE endpoint that has to survive a window reload. The UI
+only polls while something is running.
+
+### Transfer history
+
+Every job is a row in the `transfers` table, mirroring the server's schema so both sides age
+out history the same way. Two deliberate differences: `title` is denormalized (the client has
+no catalog table to join against) and `error` carries the failure message.
+
+Only *non-terminal* jobs live in memory. That is why a restart cannot resurrect a phantom
+progress bar: `reconcile_stale_jobs()` marks any leftover running row `failed` on startup, and
+`prune_jobs()` trims the table to `TRANSFER_HISTORY_LIMIT` (500) rows.
 
 ## Server contract required
 
@@ -200,5 +247,5 @@ The Python side is complete and the React UI is wired to it. Remaining work:
 3. ~~Add a Settings view backed by `GET`/`PUT /api/settings` and `POST /api/settings/discover`.~~
    **Done** — `SettingsView` saves, discovers and tests the address, and surfaces
    `ClientError` messages inline.
-4. Show install progress — `POST /api/apps/<id>/install` is synchronous today; add a
-   progress endpoint or a server-sent-events stream if the UI needs a live bar.
+4. ~~Show install progress.~~ **Done** — installs run as background jobs and `DownloadsView`
+   renders a live bar from `GET /api/jobs`.
