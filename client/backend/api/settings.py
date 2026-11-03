@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import settings
 from ..errors import ClientError
-from ..services import discovery_service
+from ..services import discovery_service, server_client
 
 bp = Blueprint("settings", __name__, url_prefix="/api/settings")
 
@@ -37,6 +37,39 @@ def update_settings():
             "The server address must look like http://192.168.1.10:8756.", status=400
         )
     return jsonify(settings.set_server_url(url))
+
+
+@bp.post("/test")
+def test_connection():
+    """Probe a server's ``/api/health`` without changing the stored address.
+
+    The body may carry ``{"server_url": "..."}`` so the UI can verify an address
+    *before* saving it. An empty or absent value falls back to the configured
+    URL. This endpoint is deliberately read-only: only ``PUT`` and ``/discover``
+    persist anything.
+    """
+    body = request.get_json(silent=True)
+    url = ""
+    if isinstance(body, dict):
+        raw = body.get("server_url")
+        if raw is not None and not isinstance(raw, str):
+            raise ClientError("'server_url' must be a string.", status=400)
+        url = (raw or "").strip().rstrip("/")
+
+    if url and not _looks_like_url(url):
+        raise ClientError(
+            "The server address must look like http://192.168.1.10:8756.", status=400
+        )
+    if not url:
+        url = settings.get_server_url()
+    if not url:
+        raise ClientError(
+            "No server address is configured. Enter one or discover a server on the LAN.",
+            status=400,
+        )
+
+    server_client.check_health(url)
+    return jsonify({"status": "ok", "server_url": url})
 
 
 @bp.post("/discover")
