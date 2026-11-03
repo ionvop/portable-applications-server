@@ -63,6 +63,39 @@ export interface Install {
   installed_at: string | null
 }
 
+/**
+ * The lifecycle of an install job.
+ *
+ * `queued` and the two in-flight states are only ever reported by a live job;
+ * a job read back from history is always `completed` or `failed`.
+ */
+export type JobStatus =
+  | "queued"
+  | "downloading"
+  | "extracting"
+  | "completed"
+  | "failed"
+
+/**
+ * One install attempt, as delivered by `POST /api/apps/<id>/install`,
+ * `GET /api/jobs` and `GET /api/jobs/<id>`.
+ *
+ * `total_bytes` is the archive size when the server sent a `Content-Length`,
+ * otherwise the manifest's uncompressed size, so it is an estimate and the
+ * ratio can exceed 100%. `error` is empty unless `status` is `failed`.
+ */
+export interface Job {
+  id: number
+  entry_id: number
+  title: string
+  status: JobStatus
+  received_bytes: number
+  total_bytes: number
+  error: string
+  started_at: string | null
+  finished_at: string | null
+}
+
 /** Stored client settings, as delivered by `GET`/`PUT /api/settings`. */
 export interface Settings {
   server_url: string
