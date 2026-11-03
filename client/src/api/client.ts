@@ -1,6 +1,7 @@
 import type {
   CatalogApp,
   CatalogDetail,
+  ConnectionTest,
   DiscoveryReply,
   Install,
   LaunchResult,
@@ -151,4 +152,19 @@ export function updateSettings(serverUrl: string): Promise<Settings> {
 /** `POST /api/settings/discover` */
 export function discoverServer(): Promise<DiscoveryReply> {
   return request("/settings/discover", { method: "POST" })
+}
+
+/**
+ * `POST /api/settings/test`
+ *
+ * Probes the server's `/api/health` through the client backend, because the
+ * server sends no CORS headers and the browser cannot call it directly. Pass
+ * the draft address to verify it before saving; omit it to test the stored one.
+ * The call never persists anything.
+ */
+export function testConnection(serverUrl?: string): Promise<ConnectionTest> {
+  return request("/settings/test", {
+    method: "POST",
+    body: JSON.stringify({ server_url: serverUrl ?? "" }),
+  })
 }
