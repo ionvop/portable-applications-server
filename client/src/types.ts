@@ -77,6 +77,17 @@ export interface DiscoveryReply {
   host: string
 }
 
+/**
+ * The reply from `POST /api/settings/test`.
+ *
+ * `server_url` echoes the address that was actually probed, which may be the
+ * unsaved draft the user typed rather than the stored value.
+ */
+export interface ConnectionTest {
+  status: string
+  server_url: string
+}
+
 /** The reply from `POST /api/apps/<id>/launch`. */
 export interface LaunchResult {
   entry_id: number
