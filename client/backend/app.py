@@ -13,7 +13,7 @@ from __future__ import annotations
 from flask import Flask, jsonify, send_from_directory
 
 from . import paths
-from .api import apps, catalog, settings, system, thumbnails
+from .api import apps, catalog, jobs, settings, system, thumbnails
 from .errors import ClientError
 
 
@@ -30,6 +30,7 @@ def create_app() -> Flask:
     app.register_blueprint(system.bp)
     app.register_blueprint(catalog.bp)
     app.register_blueprint(apps.bp)
+    app.register_blueprint(jobs.bp)
     app.register_blueprint(settings.bp)
     app.register_blueprint(thumbnails.bp)
 
