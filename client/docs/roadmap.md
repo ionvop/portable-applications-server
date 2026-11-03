@@ -1,6 +1,6 @@
 ## Current state (verified)
 
-**Steps 1–4 are done: the client renders a real server catalog, a real local library, and real cover art.**
+**Steps 1–5 are done: the client renders a real server catalog, a real local library, real cover art, and a working Settings write path.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
@@ -14,7 +14,8 @@
 1. **Install is synchronous.** `POST /api/apps/<id>/install` runs `ensure_installed` inline. A 4 GB game blocks the request for minutes with no progress — `install_service.ensure_installed` already accepts a `progress` callback that the API never passes.
 2. **No transfer/job endpoint.** `DownloadsView` has no data source; the client backend has no `transfers` table.
 3. ~~**No thumbnail route.**~~ **Done in Step 4** — `GET /api/thumbnails/<name>` proxies and caches covers under `data/thumbnails/`, and `Cover.tsx` renders them with the gradient as fallback.
-4. **Write actions are inert.** `AppDetailView`'s install/verify buttons, `LibraryView`'s Play/trash, and `SettingsView`'s save/discover/test buttons do nothing yet.
+4. **Write actions are inert.** `AppDetailView`'s install/verify buttons and `LibraryView`'s
+   Play/trash do nothing yet. (`SettingsView`'s save/discover/test are wired as of Step 5.)
 5. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
 
 ---
@@ -75,11 +76,22 @@ Each step is independently shippable. Don't start the next until the "done when"
 - `LibraryView` now passes `entry?.thumbnail` into its row `Cover`; `CatalogView` and `AppDetailView` already passed the whole `CatalogApp`.
 - `smoke_test.py` gained a stub `/api/files/thumbnail/<name>` plus checks for the 200 round-trip, content type, on-disk cache, cache-hit short-circuit, traversal rejection and 404.
 
-### Step 5 — Settings write path and discovery
+### Step 5 — Settings write path and discovery ✅
 - `SettingsView`: controlled input; `Save` → `PUT /api/settings`; `Discover on LAN` → `POST /api/settings/discover`; `Test connection` → a new `POST /api/settings/test` that calls the server's `/api/health` through `server_client` (the browser cannot do this directly — no CORS on the server).
 - Surface the `ClientError` message inline on failure.
 
 **Done when:** the address survives a restart, and discovery finds a running server.
+
+**Completed.** Notes on how it landed:
+
+- `server_client.check_health` reuses `_get_json`, so a dead server produces the same readable "Could not reach the server at …" 503 as the catalog path, and a reachable server that answers anything other than `{"status": "ok"}` is a 502 rather than a false success.
+- `POST /api/settings/test` is **read-only**: it accepts an optional `{"server_url": …}` so the UI can verify an address *before* saving it, falls back to the stored URL when the body is empty, and never writes. Only `PUT` and `/discover` persist.
+- `SettingsView` holds the address as a `draft: string | null` where `null` means "show the stored value". A successful save or discovery sets it back to `null`, so the authoritative payload takes over without an effect syncing state (which would trip `react/set-state-in-effect`).
+- `busy: "save" | "discover" | "test" | null` puts a spinner on the active button and disables all three, so a slow discovery cannot be double-fired. `Save` is additionally disabled until the draft actually differs from the stored value (trailing slashes ignored).
+- Failures render as a red `role="alert"` line and successes as a green `role="status"` line under the buttons, both fed from `ApiError.message` — the backend's `ClientError` text reaches the user verbatim.
+- `App.tsx` gained `handleSettingsChanged`: it applies the new settings immediately, refetches `system` (so the navbar badge and footer URL update) and refetches the catalog against the new address. Clearing the address short-circuits the catalog fetch, mirroring the mount-time behaviour so the Store says "No server set" rather than "Server unreachable".
+- Verified live: `PUT` wrote `data/settings.json`, `POST /api/settings/test` returned `{"status":"ok","server_url":"http://127.0.0.1:8756"}`, `POST /api/settings/discover` found the running server at `http://192.168.254.106:8756` and persisted `discovered_at`, and the address was still there after restarting the API.
+- `smoke_test.py` gained a stub `/api/health` plus nine checks: success, stored-URL fallback, bad URL, non-string body, dead port (503 + message), no URL at all (400), and that testing never persists.
 
 ### Step 6 — Install as a background job with progress
 This is the step that makes the app feel real.
