@@ -4,12 +4,21 @@ import type {
   CatalogApp,
   ConnectionState,
   Install,
+  Job,
   Settings,
   SystemInfo,
   ThemeId,
   ViewId,
 } from "./types"
-import { ApiError, getCatalog, getInstalled, getSettings, getSystemInfo } from "./api/client"
+import {
+  ApiError,
+  getCatalog,
+  getInstalled,
+  getJobs,
+  getSettings,
+  getSystemInfo,
+} from "./api/client"
+import { hasActiveJobs, isActiveJob } from "./lib/jobs"
 import { AppShell } from "./components/layout/AppShell"
 import { ErrorNotice } from "./components/ErrorNotice"
 import { CatalogView } from "./views/CatalogView"
@@ -53,6 +62,7 @@ function App() {
   const [catalog, setCatalog] = useState<CatalogApp[]>([])
   const [installs, setInstalls] = useState<Install[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
 
   const [loading, setLoading] = useState(true)
   /** The client backend itself is down — nothing can be rendered. */
@@ -63,6 +73,10 @@ function App() {
   // Guards against a stale response overwriting a newer one (StrictMode mounts
   // the effect twice, and Retry can fire while a load is still in flight).
   const requestId = useRef(0)
+
+  // Job ids that were running at the last poll. A job that disappears from this
+  // set has finished, which is the cue to refresh the Library and the Store.
+  const activeJobIds = useRef<Set<number>>(new Set())
 
   // daisyUI reads the theme from the document element, so mirror state there.
   useEffect(() => {
@@ -99,11 +113,8 @@ function App() {
           ),
         )
 
-    const [catalogResult, installsResult, settingsResult] = await Promise.allSettled([
-      catalogRequest,
-      getInstalled(),
-      getSettings(),
-    ])
+    const [catalogResult, installsResult, settingsResult, jobsResult] =
+      await Promise.allSettled([catalogRequest, getInstalled(), getSettings(), getJobs()])
     if (id !== requestId.current) return
 
     if (catalogResult.status === "fulfilled") {
@@ -113,10 +124,14 @@ function App() {
       setCatalogError(messageFor(catalogResult.reason, "Could not load the catalog."))
     }
 
-    // Installs and settings are local, so a failure here is unexpected but not
-    // fatal: degrade to empty rather than blanking the whole shell.
+    // Installs, settings and jobs are local, so a failure here is unexpected
+    // but not fatal: degrade to empty rather than blanking the whole shell.
     setInstalls(installsResult.status === "fulfilled" ? installsResult.value : [])
     setSettings(settingsResult.status === "fulfilled" ? settingsResult.value : null)
+
+    const initialJobs = jobsResult.status === "fulfilled" ? jobsResult.value : []
+    activeJobIds.current = new Set(initialJobs.filter(isActiveJob).map((job) => job.id))
+    setJobs(initialJobs)
 
     setLoading(false)
   }, [])
@@ -127,6 +142,55 @@ function App() {
     // oxlint-disable-next-line react/set-state-in-effect
     void load()
   }, [load])
+
+  /**
+   * Re-read the local install list and the catalog after an install finishes,
+   * so the Library gains the app and the Store flips to "Installed" without a
+   * manual reload.
+   */
+  const refreshAfterInstall = useCallback(async () => {
+    const [installsResult, catalogResult] = await Promise.allSettled([
+      getInstalled(),
+      getCatalog(),
+    ])
+    if (installsResult.status === "fulfilled") setInstalls(installsResult.value)
+    if (catalogResult.status === "fulfilled") {
+      setCatalog(catalogResult.value)
+      setCatalogError(null)
+    }
+  }, [])
+
+  /**
+   * Poll the job list. A job that was running at the previous poll and is gone
+   * now has finished, which triggers the post-install refresh.
+   */
+  const refreshJobs = useCallback(async () => {
+    let next: Job[]
+    try {
+      next = await getJobs()
+    } catch {
+      // A failed poll is transient; the next tick tries again.
+      return
+    }
+
+    const current = new Set(next.filter(isActiveJob).map((job) => job.id))
+    const finished = [...activeJobIds.current].filter((id) => !current.has(id))
+    activeJobIds.current = current
+    setJobs(next)
+
+    if (finished.length > 0) void refreshAfterInstall()
+  }, [refreshAfterInstall])
+
+  // Only poll while something is actually running: an idle client makes no
+  // requests at all.
+  const jobsRunning = hasActiveJobs(jobs)
+  useEffect(() => {
+    if (!jobsRunning) return
+    const timer = setInterval(() => {
+      void refreshJobs()
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [jobsRunning, refreshJobs])
 
   /** Re-run the load from a clean slate, used by the error cards' Retry. */
   const retry = () => {
@@ -287,7 +351,7 @@ function App() {
         />
       )}
 
-      {view === "downloads" && <DownloadsView />}
+      {view === "downloads" && <DownloadsView jobs={jobs} />}
 
       {view === "settings" && (
         <SettingsView
