@@ -1,4 +1,6 @@
+import { useState } from "react"
 import type { ConnectionState, Settings, SystemInfo, ThemeId } from "../types"
+import { ApiError, discoverServer, getSettings, testConnection, updateSettings } from "../api/client"
 import { describeConnection } from "../lib/connection"
 import { formatRelativeTime } from "../lib/format"
 import { CheckIcon, RefreshIcon, SearchIcon, ServerIcon } from "../components/icons"
@@ -9,12 +11,25 @@ interface SettingsViewProps {
   connection: ConnectionState
   theme: ThemeId
   onToggleTheme: () => void
+  /** Called with the authoritative settings after a save or a discovery. */
+  onSettingsSaved: (settings: Settings) => void
+}
+
+/** Which connection action is in flight, so only that button shows a spinner. */
+type BusyAction = "save" | "discover" | "test" | null
+
+/** Turns any thrown value into text the UI can show. */
+function messageFor(cause: unknown, fallback: string): string {
+  return cause instanceof ApiError ? cause.message : fallback
 }
 
 /**
  * Connection and client info, rendered from the real `system` and `settings`
- * payloads. The address field and the connection buttons stay inert until the
- * write path lands; nothing here is saved or probed.
+ * payloads.
+ *
+ * The address field is a controlled draft: `null` means "show the stored
+ * value", so a successful save or discovery can drop the draft and let the
+ * authoritative payload take over without an effect syncing state.
  */
 export function SettingsView({
   system,
@@ -22,8 +37,72 @@ export function SettingsView({
   connection,
   theme,
   onToggleTheme,
+  onSettingsSaved,
 }: SettingsViewProps) {
   const status = describeConnection(connection)
+
+  const [draft, setDraft] = useState<string | null>(null)
+  const [busy, setBusy] = useState<BusyAction>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const value = draft ?? settings.server_url
+  const dirty = draft !== null && draft.trim().replace(/\/+$/, "") !== settings.server_url
+
+  /** Clear the previous outcome whenever the user edits the address. */
+  const editAddress = (next: string) => {
+    setDraft(next)
+    setError(null)
+    setNotice(null)
+  }
+
+  const save = async () => {
+    setBusy("save")
+    setError(null)
+    setNotice(null)
+    try {
+      const saved = await updateSettings(value.trim())
+      setDraft(null)
+      onSettingsSaved(saved)
+      setNotice(saved.server_url ? `Saved ${saved.server_url}.` : "Server address cleared.")
+    } catch (cause) {
+      setError(messageFor(cause, "The server address could not be saved."))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const discover = async () => {
+    setBusy("discover")
+    setError(null)
+    setNotice(null)
+    try {
+      const reply = await discoverServer()
+      // The backend persists the reply, so re-read it for `discovered_at`.
+      const stored = await getSettings()
+      setDraft(null)
+      onSettingsSaved(stored)
+      setNotice(`Found ${reply.app || "a server"} at ${reply.server_url}.`)
+    } catch (cause) {
+      setError(messageFor(cause, "No server was found on the local network."))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const test = async () => {
+    setBusy("test")
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await testConnection(value.trim())
+      setNotice(`The server at ${result.server_url} answered.`)
+    } catch (cause) {
+      setError(messageFor(cause, "The server did not answer."))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
@@ -49,9 +128,11 @@ export function SettingsView({
             <input
               type="url"
               className="input input-sm w-full font-mono"
-              defaultValue={settings.server_url}
+              value={value}
+              onChange={(event) => editAddress(event.target.value)}
               placeholder="http://192.168.1.10:8756"
               aria-label="Server address"
+              disabled={busy !== null}
             />
             <p className="label text-xs text-base-content/50">
               {settings.discovered_at
@@ -61,18 +142,60 @@ export function SettingsView({
           </fieldset>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="btn btn-sm btn-primary gap-2">
-              <SearchIcon width={16} height={16} />
+            <button
+              type="button"
+              className="btn btn-sm btn-primary gap-2"
+              onClick={() => void save()}
+              disabled={busy !== null || !dirty}
+            >
+              {busy === "save" ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                <CheckIcon width={16} height={16} />
+              )}
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm gap-2"
+              onClick={() => void discover()}
+              disabled={busy !== null}
+            >
+              {busy === "discover" ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                <SearchIcon width={16} height={16} />
+              )}
               Discover on LAN
             </button>
-            <button type="button" className="btn btn-sm gap-2">
-              <RefreshIcon width={16} height={16} />
+            <button
+              type="button"
+              className="btn btn-sm gap-2"
+              onClick={() => void test()}
+              disabled={busy !== null}
+            >
+              {busy === "test" ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                <RefreshIcon width={16} height={16} />
+              )}
               Test connection
             </button>
-            <span className="ml-auto text-xs text-base-content/40">
-              Saving and discovery are not wired yet.
-            </span>
+            {dirty && busy === null && (
+              <span className="ml-auto text-xs text-base-content/40">Unsaved changes</span>
+            )}
           </div>
+
+          {error && (
+            <p role="alert" className="text-xs text-error">
+              {error}
+            </p>
+          )}
+          {notice && !error && (
+            <p role="status" className="text-xs text-success">
+              {notice}
+            </p>
+          )}
         </div>
       </div>
 
