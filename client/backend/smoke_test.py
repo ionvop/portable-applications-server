@@ -13,6 +13,7 @@ import json
 import shutil
 import sys
 import threading
+import time
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +26,7 @@ from backend.errors import ClientError
 from backend.models import Install
 from backend.services import (
     install_service,
+    job_service,
     launch_service,
     server_client,
     state_service,
@@ -39,6 +41,26 @@ def check(label: str, condition: bool, detail: object = "") -> None:
     else:
         failures.append(label)
         print(f"  FAIL  {label} {detail}")
+
+
+def wait_for_job(client, job_id: int, timeout: float = 10.0) -> dict:
+    """Poll ``GET /api/jobs/<id>`` until the job reaches a terminal state.
+
+    Installs run on a background thread, so the test has to wait for the worker
+    rather than read the response body. A timeout returns the last snapshot so
+    the caller's assertions report the real state instead of raising.
+    """
+    deadline = time.monotonic() + timeout
+    job: dict = {}
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/jobs/{job_id}")
+        if response.status_code != 200:
+            return {"status": "missing", "error": response.get_json()}
+        job = response.get_json()
+        if job["status"] in {"completed", "failed"}:
+            return job
+        time.sleep(0.02)
+    return job
 
 
 # --------------------------------------------------------------------------
@@ -280,12 +302,26 @@ def main() -> int:
 
         print("install")
         response = client.post(f"/api/apps/{ENTRY_ID}/install")
-        check("install returns 201", response.status_code == 201, response.status_code)
-        install = response.get_json()
-        check("install records version", install["version"] == ENTRY_VERSION, install)
-        check("install records executable", install["executable"] == ENTRY_EXECUTABLE)
+        check("install returns 202", response.status_code == 202, response.status_code)
+        job = response.get_json()
+        check("install returns a job", isinstance(job.get("id"), int), job)
+        check("job starts queued or running", job["status"] in {"queued", "downloading", "extracting"}, job)
+        check("job carries the entry id", job["entry_id"] == ENTRY_ID, job)
 
-        app_dir = paths.apps_dir() / install["directory"]
+        job = wait_for_job(client, job["id"])
+        check("job completes", job["status"] == "completed", job)
+        check("job reports no error", job["error"] == "", job)
+        check("job received bytes", job["received_bytes"] == len(ARCHIVE), job)
+        check("job total bytes", job["total_bytes"] == len(ARCHIVE), job)
+        check("job has a finish time", bool(job["finished_at"]), job)
+
+        install = state_service.get_install(ENTRY_ID)
+        check("install recorded", install is not None)
+        assert install is not None
+        check("install records version", install.version == ENTRY_VERSION, install)
+        check("install records executable", install.executable == ENTRY_EXECUTABLE, install)
+
+        app_dir = paths.apps_dir() / install.directory
         check("app directory created", app_dir.is_dir())
         check("executable extracted", (app_dir / ENTRY_EXECUTABLE).is_file())
         check("nested data extracted", (app_dir / "data" / "level1.dat").is_file())
@@ -296,6 +332,23 @@ def main() -> int:
 
         response = client.get("/api/catalog")
         check("catalog now reports installed", response.get_json()[0]["installed"] is True)
+
+        print("jobs")
+        response = client.get("/api/jobs")
+        jobs = response.get_json()
+        check("jobs returns 200", response.status_code == 200, response.status_code)
+        check("jobs lists the finished install", any(item["id"] == job["id"] for item in jobs), jobs)
+        check("finished job is not active", all(item["status"] in {"completed", "failed"} for item in jobs), jobs)
+
+        response = client.get(f"/api/jobs/{job['id']}")
+        check("job by id returns 200", response.status_code == 200, response.status_code)
+        check("job by id matches", response.get_json()["id"] == job["id"])
+
+        response = client.get("/api/jobs/999999")
+        check("unknown job returns 404", response.status_code == 404, response.status_code)
+
+        response = client.get("/api/jobs?limit=abc")
+        check("bad job limit rejected", response.status_code == 400, response.status_code)
 
         # A second install with the same version must not re-download.
         calls: list[int] = []
@@ -308,13 +361,103 @@ def main() -> int:
         server_client.download_archive = counting_download
         try:
             response = client.post(f"/api/apps/{ENTRY_ID}/install")
-            check("reinstall returns 201", response.status_code == 201, response.status_code)
+            check("reinstall returns 202", response.status_code == 202, response.status_code)
+            skipped = wait_for_job(client, response.get_json()["id"])
+            check("current install completes", skipped["status"] == "completed", skipped)
             check("current install skips download", calls == [], calls)
 
             response = client.post(f"/api/apps/{ENTRY_ID}/install", json={"force": True})
+            forced = wait_for_job(client, response.get_json()["id"])
+            check("forced install completes", forced["status"] == "completed", forced)
             check("forced install re-downloads", calls == [1], calls)
         finally:
             server_client.download_archive = original_download
+
+        print("job progress")
+        # A slow download proves two things at once: the request returns before
+        # the transfer finishes, and a second request attaches to the running
+        # job instead of starting a competing one.
+        slow_calls: list[int] = []
+        release = threading.Event()
+
+        def slow_download(entry_id, destination, server_url=None, progress=None):
+            slow_calls.append(1)
+            total = len(ARCHIVE)
+            if progress is not None:
+                progress(total // 4, total)
+            # Hold the worker until the test has observed the running job.
+            release.wait(timeout=5)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(ARCHIVE)
+            if progress is not None:
+                progress(total, total)
+            return destination
+
+        server_client.download_archive = slow_download
+        try:
+            response = client.post(f"/api/apps/{ENTRY_ID}/install", json={"force": True})
+            check("slow install returns 202", response.status_code == 202, response.status_code)
+            running = response.get_json()
+
+            # The worker is parked, so the job must still be in flight. Poll
+            # until it has actually reported progress: the thread may not have
+            # been scheduled yet when the POST returns.
+            observed = running
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                observed = client.get(f"/api/jobs/{running['id']}").get_json()
+                if observed["received_bytes"] > 0:
+                    break
+                time.sleep(0.02)
+            check(
+                "job is still running while downloading",
+                observed["status"] in {"queued", "downloading", "extracting"},
+                observed,
+            )
+            check("job reports partial progress", observed["received_bytes"] > 0, observed)
+            check("job reports a total", observed["total_bytes"] == len(ARCHIVE), observed)
+
+            # A duplicate request must attach to the same job.
+            duplicate = client.post(f"/api/apps/{ENTRY_ID}/install", json={"force": True})
+            check("duplicate install returns 202", duplicate.status_code == 202, duplicate.status_code)
+            check(
+                "duplicate install reuses the running job",
+                duplicate.get_json()["id"] == running["id"],
+                duplicate.get_json(),
+            )
+            check("duplicate install starts no second download", len(slow_calls) == 1, slow_calls)
+
+            release.set()
+            finished = wait_for_job(client, running["id"])
+            check("slow install completes", finished["status"] == "completed", finished)
+            check("slow install reports full size", finished["received_bytes"] == len(ARCHIVE), finished)
+        finally:
+            release.set()
+            server_client.download_archive = original_download
+
+        print("job failures")
+        # A manifest 404 must surface as a failed job, not a hung one.
+        response = client.post("/api/apps/999/install")
+        check("install of a missing entry returns 202", response.status_code == 202, response.status_code)
+        failed = wait_for_job(client, response.get_json()["id"])
+        check("missing entry job fails", failed["status"] == "failed", failed)
+        check("failed job explains itself", "not found" in failed["error"].lower(), failed)
+
+        # A job left running by a previous process must be reconciled on startup.
+        with db.get_connection() as connection:
+            cursor = connection.execute(
+                "INSERT INTO transfers (entry_id, title, status) VALUES (?, ?, 'downloading')",
+                (ENTRY_ID, "Leftover"),
+            )
+            leftover_id = int(cursor.lastrowid)
+        job_service.reconcile_stale_jobs()
+        leftover = job_service.get_job(leftover_id)
+        check("stale job reconciled", leftover is not None and leftover["status"] == "failed", leftover)
+        check(
+            "stale job explains itself",
+            leftover is not None and "stopped" in leftover["error"].lower(),
+            leftover,
+        )
 
         print("launch")
         launched: list[dict[str, object]] = []
@@ -357,7 +500,7 @@ def main() -> int:
                     Install(
                         entry_id=1,
                         title="Bad",
-                        directory=install["directory"],
+                        directory=install.directory,
                         executable=bad,
                         version="1",
                     )
@@ -397,6 +540,10 @@ def main() -> int:
         for leftover in paths.tmp_dir().glob("*.zip"):
             leftover.unlink(missing_ok=True)
         state_service.remove_install(ENTRY_ID)
+        # Transfer history is persistent by design, so the test clears it to
+        # keep repeated runs from accumulating rows.
+        with db.get_connection() as connection:
+            connection.execute("DELETE FROM transfers")
         settings.set_server_url("")
 
     print()
