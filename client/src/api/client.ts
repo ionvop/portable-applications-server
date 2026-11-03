@@ -4,6 +4,7 @@ import type {
   ConnectionTest,
   DiscoveryReply,
   Install,
+  Job,
   LaunchResult,
   Settings,
   SystemInfo,
@@ -115,15 +116,27 @@ export function getInstalled(): Promise<Install[]> {
 /**
  * `POST /api/apps/<id>/install`
  *
- * Runs synchronously on the backend: the promise resolves once the archive has
- * been downloaded and extracted. Pass `force` to re-download even when the
- * recorded version already matches.
+ * Starts a background job and resolves as soon as it is recorded, so a large
+ * game never blocks the request. Follow it with {@link getJobs} or
+ * {@link getJob}. Pass `force` to re-download even when the recorded version
+ * already matches. Installing an entry that is already installing returns the
+ * running job rather than starting a second download.
  */
-export function installApp(entryId: number, force = false): Promise<Install> {
+export function installApp(entryId: number, force = false): Promise<Job> {
   return request(`/apps/${entryId}/install`, {
     method: "POST",
     body: JSON.stringify({ force }),
   })
+}
+
+/** `GET /api/jobs` — active jobs first, then finished history. */
+export function getJobs(): Promise<Job[]> {
+  return request("/jobs")
+}
+
+/** `GET /api/jobs/<id>` */
+export function getJob(jobId: number): Promise<Job> {
+  return request(`/jobs/${jobId}`)
 }
 
 /** `POST /api/apps/<id>/launch` */
