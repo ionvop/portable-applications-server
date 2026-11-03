@@ -5,7 +5,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from ..errors import ClientError
-from ..services import install_service, launch_service, state_service
+from ..services import install_service, job_service, launch_service, state_service
 
 bp = Blueprint("apps", __name__, url_prefix="/api/apps")
 
@@ -18,14 +18,16 @@ def list_installed():
 
 @bp.post("/<int:entry_id>/install")
 def install(entry_id: int):
-    """Download and extract the entry, skipping the download when current.
+    """Start a background install and return the job immediately.
 
     ``{"force": true}`` re-downloads even when the recorded version matches.
+    A second request for an entry that is already installing returns the
+    running job instead of starting a competing download into the same folder.
     """
     body = request.get_json(silent=True) or {}
     force = bool(body.get("force")) if isinstance(body, dict) else False
-    install_row = install_service.ensure_installed(entry_id, force=force)
-    return jsonify(install_row.to_dict()), 201
+    job = job_service.start_install(entry_id, force=force)
+    return jsonify(job), 202
 
 
 @bp.post("/<int:entry_id>/launch")
