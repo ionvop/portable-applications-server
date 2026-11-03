@@ -32,6 +32,22 @@ ProgressCallback = Callable[[int, "int | None"], None]
 MAX_COVER_BYTES = config.MAX_THUMBNAIL_BYTES
 
 
+def check_health(server_url: str | None = None) -> dict[str, Any]:
+    """Probe the server's ``/api/health`` and return its payload.
+
+    Used by ``POST /api/settings/test``: the browser cannot call the server
+    directly (it sends no CORS headers), so the probe runs here instead. A
+    reachable server that answers anything other than ``{"status": "ok"}`` is
+    reported as an upstream failure rather than a success.
+    """
+    payload = _get_json("/api/health", server_url)
+    if not isinstance(payload, dict) or payload.get("status") != "ok":
+        raise ClientError(
+            "The server answered, but not with a healthy status.", status=502
+        )
+    return payload
+
+
 def get_catalog(server_url: str | None = None) -> list[CatalogEntry]:
     """Fetch the public catalog listing."""
     payload = _get_json("/api/client/catalog", server_url)
