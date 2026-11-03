@@ -54,3 +54,7 @@ ZIP_CHUNK_SIZE = 1024 * 1024
 
 # Partial downloads older than this are removed on startup.
 TEMP_MAX_AGE_SECONDS = 60 * 60
+
+# How many transfer rows to keep; older rows are pruned on startup. Mirrors the
+# server's constant so both sides of the system age out history the same way.
+TRANSFER_HISTORY_LIMIT = 500
