@@ -152,6 +152,42 @@ function App() {
     setTheme((current) => (current === "night" ? "light" : "night"))
   }
 
+  /**
+   * A saved or discovered address changes what the whole shell should show:
+   * the navbar badge, the footer URL and the catalog all derive from it. The
+   * settings are applied immediately so the form reflects the new value, then
+   * `system` and the catalog are refreshed against the new server.
+   */
+  const handleSettingsChanged = (next: Settings) => {
+    setSettings(next)
+    void getSystemInfo()
+      .then(setSystem)
+      .catch(() => {
+        // The shell already renders from the previous system snapshot; a
+        // failed refresh here is not worth interrupting the user for.
+      })
+
+    if (!next.server_url) {
+      // Nothing to fetch: mirror the mount-time short circuit so the Store
+      // says "No server set" instead of "Server unreachable".
+      setCatalog([])
+      setCatalogError(
+        "No server address is configured. Set one in Settings or discover a server on the LAN.",
+      )
+      return
+    }
+
+    void getCatalog()
+      .then((entries) => {
+        setCatalog(entries)
+        setCatalogError(null)
+      })
+      .catch((error: unknown) => {
+        setCatalog([])
+        setCatalogError(messageFor(error, "Could not reach the server."))
+      })
+  }
+
   const navigate = (next: ViewId) => {
     if (next !== "app") setSelectedApp(null)
     setView(next)
@@ -260,6 +296,7 @@ function App() {
           connection={connection}
           theme={theme}
           onToggleTheme={toggleTheme}
+          onSettingsSaved={handleSettingsChanged}
         />
       )}
     </AppShell>
