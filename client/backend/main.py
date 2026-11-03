@@ -21,7 +21,7 @@ from werkzeug.serving import make_server
 
 from . import config, db, paths
 from .app import create_app
-from .services import install_service
+from .services import install_service, job_service
 
 
 class ServerThread(threading.Thread):
@@ -53,6 +53,10 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
 def main() -> int:
     db.init_db()
     install_service.sweep_stale_downloads()
+    # Worker threads do not survive a restart, so any row still marked running
+    # is a leftover from the previous process.
+    job_service.reconcile_stale_jobs()
+    job_service.prune_jobs()
 
     if not (paths.web_dir() / "index.html").is_file():
         print(
