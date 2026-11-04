@@ -14,6 +14,9 @@ contract, and packaging details.
 
 - Python 3.10+
 - Node.js 20+
+- Windows 10/11 with the **Microsoft Edge WebView2 runtime** and **.NET Framework 4.6.2+**
+  (both ship with current Windows builds; the client checks for them at startup and says
+  what is missing instead of opening a blank window)
 
 ## Setup
 
@@ -98,10 +101,40 @@ release\PortableApplicationsClient\
 
 Copy the whole `release\PortableApplicationsClient` folder to another machine and run the
 executable — no Python or Node.js install is required. The `data\` folder (install state,
-downloaded applications, settings) is always created **beside the exe**, never inside the
-bundle, so the folder stays self-contained and can be moved or backed up as a unit.
+downloaded applications, settings, log) is always created **beside the exe**, never inside
+the bundle, so the folder stays self-contained and can be moved or backed up as a unit.
 
 `start.bat` remains the development launcher and runs the app from source.
+
+### Build verification
+
+`build.bat` does not declare success until the bundle proves itself. After PyInstaller it:
+
+1. deletes any `release\` left by a previous run, so a stale `data\` can never ship;
+2. runs `PortableApplicationsClient.exe --selftest`, which checks from *inside* the frozen
+   process that the frontend is served out of `_internal\dist`, that `data\` is created
+   beside the exe (not inside the bundle), that the database opens, that every read-only
+   endpoint answers, and that a real socket can be bound;
+3. copies the whole folder to `%TEMP%`, runs the selftest again there, and confirms `data\`
+   appeared beside the *copied* exe — the portability check;
+4. removes the `data\` the selftest created, so the shipped folder is clean.
+
+The exe is windowed, so the verdict travels in the exit code and in a report file. Run the
+check by hand at any time:
+
+```powershell
+release\PortableApplicationsClient\PortableApplicationsClient.exe --selftest --selftest-log selftest.log
+```
+
+Reports from the build are written to `%TEMP%\pac-selftest.log` and
+`%TEMP%\pac-selftest-copy.log`.
+
+### Startup log
+
+Because the packaged build has no console, startup failures are written to
+`data\client.log` (rotated once at 1 MB) and shown in a message box. If a client machine
+misbehaves, that file is the first thing to read. The same log records the resolved data
+folder, the port actually bound, and any unhandled exception.
 
 ## Status
 
@@ -120,6 +153,6 @@ background with live progress, launch, and remove — all from one window.
   refresh-on-focus so the Library updates without a manual reload.
 
 See [`docs/roadmap.md`](docs/roadmap.md) for the step-by-step history and
-[`backend/README.md`](backend/README.md) for the API reference and data layout. The remaining
-work is packaging verification (Step 11).
+[`backend/README.md`](backend/README.md) for the API reference and data layout. All eleven
+roadmap steps are complete, including packaging verification.
 
