@@ -1,6 +1,7 @@
 import type { Job } from "../types"
 import { formatBytes, formatRelativeTime } from "../lib/format"
-import { hasActiveJobs, isActiveJob, jobPercent, jobStatusLabel } from "../lib/jobs"
+import { hasActiveJobs, isActiveJob, jobStatusLabel } from "../lib/jobs"
+import { JobProgress } from "../components/JobProgress"
 import { CheckIcon, DownloadIcon } from "../components/icons"
 
 interface DownloadsViewProps {
@@ -79,39 +80,14 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
   )
 }
 
-/**
- * A running job: title, phase, byte counts and a live progress bar.
- *
- * The total is prefixed with `~` because the server streams the archive
- * chunked, so the client only knows the manifest's *uncompressed* size. The
- * bar is therefore an estimate that can finish below 100% and snaps to full
- * when the job completes.
- */
+/** A running job: title plus the shared live progress block. */
 function ActiveJobRow({ job }: { job: Job }) {
-  const percent = jobPercent(job)
-  const known = job.total_bytes > 0
-
   return (
     <li className="rounded-field bg-base-100 px-3 py-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="truncate text-sm font-medium">{job.title || `Application ${job.entry_id}`}</p>
-        <span className="text-xs text-base-content/60">{jobStatusLabel(job.status)}</span>
-      </div>
-
-      <progress
-        className="progress progress-primary mt-2 w-full"
-        value={known ? percent : undefined}
-        max={100}
-        aria-label={`${job.title || "Install"} progress`}
-      />
-
-      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-base-content/60">
-        <span className="font-mono">
-          {formatBytes(job.received_bytes)}
-          {known ? ` / ~${formatBytes(job.total_bytes)}` : ""}
-        </span>
-        <span className="font-mono">{known ? `${percent}%` : "—"}</span>
-      </div>
+      <p className="truncate text-sm font-medium">
+        {job.title || `Application ${job.entry_id}`}
+      </p>
+      <JobProgress job={job} className="mt-2" />
     </li>
   )
 }
