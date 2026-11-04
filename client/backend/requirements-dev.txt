@@ -1,0 +1,7 @@
+# Development-only dependencies. The runtime set lives in requirements.txt;
+# nothing here is bundled by PyInstaller (pytest is explicitly excluded in
+# pyinstaller.spec).
+#
+#   pip install -r backend/requirements-dev.txt
+-r requirements.txt
+pytest>=8.0,<9.0
