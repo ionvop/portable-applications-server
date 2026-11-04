@@ -64,6 +64,11 @@ build is needed while iterating. Run `python backend/smoke_test.py` to check the
 baseline without starting a server or a real Portable Applications Server — it spins up a
 stub server on loopback that implements the contract below.
 
+`python -m pytest` runs the same suite through a wrapper in `backend/tests/` that redirects
+`data/` to a temporary directory, so it never disturbs a real install. Install the runner
+with `pip install -r backend/requirements-dev.txt`; the runtime set in `requirements.txt`
+stays free of test dependencies, and `pyinstaller.spec` excludes `pytest` from the bundle.
+
 ## Data layout
 
 Everything writable lives in `data/` beside the executable (or beside `run.py` in
@@ -239,14 +244,27 @@ therefore carries no stale state.
 
 ## Frontend wiring
 
-The Python side is complete and the React UI is wired to it. Remaining work:
+The React UI is wired to every endpoint above. The pieces worth knowing about:
 
-1. ~~Add `src/api/client.ts` with a `request<T>()` wrapper and typed calls for the endpoints
-   above.~~ **Done.**
-2. ~~Replace the starter UI with a catalog grid: thumbnail, title, description, and an
-   Install / Play / Update button driven by `installed` and `update_available`.~~ **Done.**
-3. ~~Add a Settings view backed by `GET`/`PUT /api/settings` and `POST /api/settings/discover`.~~
-   **Done** — `SettingsView` saves, discovers and tests the address, and surfaces
-   `ClientError` messages inline.
-4. ~~Show install progress.~~ **Done** — installs run as background jobs and `DownloadsView`
-   renders a live bar from `GET /api/jobs`.
+- **`src/api/client.ts` is the only fetch layer.** `request<T>()` wraps `fetch`, converts a
+  non-2xx body into an `ApiError` carrying the backend's `{"error": …}` message, and every
+  endpoint has a typed function. `src/types.ts` mirrors the wire shapes exactly.
+- **`App.tsx` owns the state.** It loads `system` first (the gate), then `catalog`, `installs`,
+  `settings` and `jobs` together, keeping `systemError` (full-screen) separate from
+  `catalogError` (inline in the Store). It also owns the three write paths — `startInstall`,
+  `startLaunch`, `removeInstall` — and the views keep only transient `busy`/`error` state.
+- **Installs are followed by polling.** `App.tsx` polls `GET /api/jobs` once a second *only*
+  while a job is active, and refetches `installs` + `catalog` when one leaves the active set,
+  so the Library and Store update without a reload. `DownloadsView` and `AppDetailView` share
+  the `JobProgress` component, which is where the `~` estimate prefix and the 100% clamp live.
+- **Errors are never silent.** `ErrorBanner` renders a dismissible `alert alert-error` inside
+  `AppShell`, so every screen inherits it. The job poll escalates only after three consecutive
+  failures, so a single dropped tick does not flash a banner.
+- **Refresh on focus.** `window` `focus` and `document` `visibilitychange` trigger a partial
+  refresh, throttled to once every five seconds and skipped while a job is running or a full
+  load is in flight.
+- **`SettingsView`** saves, discovers and tests the address, and surfaces `ClientError`
+  messages inline. `POST /api/settings/test` is read-only, so a draft address can be verified
+  before it is saved.
+- **`Cover`** renders `<img src="/api/thumbnails/<name>">` and falls back to a gradient
+  monogram on `onError`, so a missing cover degrades instead of showing a broken image.
