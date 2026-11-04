@@ -41,6 +41,18 @@ THUMBNAILS_DIR_NAME = "thumbnails"
 DB_FILE_NAME = "client.db"
 SETTINGS_FILE_NAME = "settings.json"
 
+# Startup log, written beside the executable. The packaged build is windowed,
+# so this file is the only record of a failure that happens before the window
+# opens. Rotated once at LOG_MAX_BYTES so a long-lived install cannot grow it
+# without bound.
+LOG_FILE_NAME = "client.log"
+LOG_MAX_BYTES = 1024 * 1024
+
+# Report written by ``PortableApplicationsClient.exe --selftest``. The build
+# script reads it to prove the frozen bundle serves the frontend and can write
+# its data folder.
+SELFTEST_LOG_FILE_NAME = "selftest.log"
+
 # Upper bound on a proxied cover image. Covers are small; anything larger is
 # either a mistake or a hostile response, and is refused rather than cached.
 MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024
