@@ -1,6 +1,6 @@
 ## Current state (verified)
 
-**Steps 1–6 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, and installs that run in the background with live progress.**
+**Steps 1–9 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, and refresh-on-focus.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
@@ -14,8 +14,8 @@
 1. ~~**Install is synchronous.**~~ **Done in Step 6** — installs run on a worker thread and the request returns `202` immediately.
 2. ~~**No transfer/job endpoint.**~~ **Done in Step 6** — `GET /api/jobs` and `GET /api/jobs/<id>` read a `transfers` table that survives a restart.
 3. ~~**No thumbnail route.**~~ **Done in Step 4** — `GET /api/thumbnails/<name>` proxies and caches covers under `data/thumbnails/`, and `Cover.tsx` renders them with the gradient as fallback.
-4. **Write actions are inert.** `AppDetailView`'s install/verify buttons and `LibraryView`'s
-   Play/trash do nothing yet. (`SettingsView`'s save/discover/test are wired as of Step 5.)
+4. ~~**Write actions are inert.**~~ **Done in Step 7** — install/verify, Play and trash all
+   round-trip through the backend.
 5. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
 
 ---
@@ -199,13 +199,40 @@ This is the step that makes the app feel real.
   address preserved, a second reset reporting `removed == 0`, and a `409` (with the install row
   intact) when a reset is attempted while a worker is parked mid-download.
 
-### Step 9 — Refresh behaviour
+### Step 9 — Refresh behaviour ✅
 - ~~Poll `/api/jobs` while Downloads is open; refetch the catalog when an install completes.~~
   **Done in Step 6** — `App.tsx` polls only while a job is active and refreshes `installs` +
-  `catalog` when one finishes. Remaining: refetch on window focus.
-- Either wire the `NavBar` search box to the catalog query or remove it (it currently duplicates `CatalogView`'s search).
+  `catalog` when one finishes.
+- ~~Refetch on window focus.~~ **Done** — see below.
+- ~~Either wire the `NavBar` search box to the catalog query or remove it.~~ **Wired** — the
+  navbar box and `CatalogView`'s box now edit one shared query.
 
 **Done when:** the Library updates without a manual reload.
+
+**Completed.** Notes on how it landed:
+
+- `App.tsx` gained `refreshOnFocus`: one `Promise.allSettled` over `getInstalled()`, `getCatalog()`
+  and `getJobs()`, writing `installs`, `catalog`/`catalogError`, `jobs` and `activeJobIds.current`
+  exactly the way `refreshAfterInstall` and `refreshJobs` do. The catalog request is **skipped**
+  (resolved as `null`, not rejected) when `server_url` is empty, so an unconfigured client does not
+  paint a "server unreachable" card just because the window was clicked.
+- The listeners are `window` `focus` **and** `document` `visibilitychange`, because pywebview's
+  WebView2 fires one or the other depending on how the window was restored. Four guards keep it
+  from becoming a request storm: a hidden document is ignored, a running job is left to the 1s poll
+  that already owns that window, a full `load()` in flight is not raced, and a refresh within
+  `FOCUS_REFRESH_MS` (5s) of the previous one is dropped.
+- The throttle timestamp is seeded in a mount effect rather than in the `useRef` initializer:
+  `Date.now()` during render trips `react(purity)`, and seeding it means the window's initial focus
+  (plus the `visible` visibility event some renderers emit on load) cannot duplicate `load()`.
+- A focus event while `systemError` is set calls `retry()` instead of `refreshOnFocus()`, so a
+  backend that came back while the window was in the background recovers on its own — the
+  full-screen error card is the one thing a partial refresh could not clear.
+- **The search box is wired, not removed.** `catalogQuery` moved up to `App.tsx` and is threaded
+  through `AppShell` → `NavBar`; `CatalogView` lost its internal `query` state and takes
+  `query`/`onQueryChange` props. Typing in the navbar navigates to the Store when the value is
+  non-empty (so the results are visible) and leaves the user where they are when it is cleared.
+  `layout` and `filter` stay local to `CatalogView` — they are view preferences, not shared state.
+- `npm run build` and `npm run lint` clean.
 
 ### Step 10 — Hardening
 - Extend `smoke_test.py` for jobs, the thumbnail proxy, `settings/test`, and the launch/remove paths.
