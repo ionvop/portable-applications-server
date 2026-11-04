@@ -3,6 +3,11 @@
 Starts the local Flask app on a background thread, waits until it accepts
 connections, then opens the PyWebView window. Closing the window shuts the
 server down cleanly.
+
+The packaged build is windowed, so nothing here may rely on a console: failures
+are logged to ``data/client.log`` and shown in a message box (see
+:mod:`backend.diagnostics`). ``--selftest`` runs the headless verification used
+by ``build.bat`` instead of opening a window.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ if __package__ in (None, ""):
 
 from werkzeug.serving import make_server
 
-from . import config, db, paths
+from . import config, db, diagnostics, paths, preflight
 from .app import create_app
 from .services import install_service, job_service
 
@@ -29,7 +34,8 @@ class ServerThread(threading.Thread):
 
     def __init__(self, host: str, port: int) -> None:
         super().__init__(daemon=True, name="flask-server")
-        self._server = make_server(host, port, create_app(), threaded=True)
+        self.port = port
+        self._server = make_server(host, port, create_app(port=port), threaded=True)
 
     def run(self) -> None:
         self._server.serve_forever()
@@ -50,7 +56,26 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
     return False
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+
+    log_file = diagnostics.setup_logging()
+    diagnostics.install_excepthooks()
+    logger = diagnostics.get_logger()
+    logger.info(
+        "%s %s starting (frozen=%s, base=%s, log=%s)",
+        config.APP_NAME,
+        config.VERSION,
+        paths.is_frozen(),
+        paths.base_dir(),
+        log_file,
+    )
+
+    if "--selftest" in args:
+        from . import selftest
+
+        return selftest.run(_selftest_log_argument(args))
+
     db.init_db()
     install_service.sweep_stale_downloads()
     # Worker threads do not survive a restart, so any row still marked running
@@ -59,26 +84,59 @@ def main() -> int:
     job_service.prune_jobs()
 
     if not (paths.web_dir() / "index.html").is_file():
-        print(
-            "The frontend has not been built.\n"
+        return diagnostics.fatal(
+            config.APP_NAME,
+            "The frontend has not been built.\n\n"
+            f"Expected:\n{paths.web_dir() / 'index.html'}\n\n"
             "Run 'npm run build' in the project root, then start the client again.",
-            file=sys.stderr,
         )
-        return 1
 
-    server = ServerThread(config.UI_HOST, config.PORT)
+    # A second double-click must not die with a traceback: the first window is
+    # already serving the UI, so just say so and exit successfully.
+    running = preflight.existing_instance()
+    if running is not None:
+        logger.info("Another instance is already running on port %s", config.PORT)
+        diagnostics.show_message(
+            config.APP_NAME,
+            "The client is already running.\n\n"
+            "Switch to the existing window instead of starting a second copy.",
+        )
+        return 0
+
+    missing = _missing_runtime()
+    if missing is not None:
+        return diagnostics.fatal(config.APP_NAME, missing)
+
+    port = preflight.choose_port()
+    if port != config.PORT:
+        logger.warning(
+            "Port %s is in use by another program; using %s instead",
+            config.PORT,
+            port,
+        )
+
+    try:
+        server = ServerThread(config.UI_HOST, port)
+    except OSError as error:
+        return diagnostics.fatal(
+            config.APP_NAME,
+            f"The local server could not start on port {port}.\n\n{error}",
+        )
     server.start()
 
-    if not _wait_for_port(config.UI_HOST, config.PORT):
-        print("The local server did not start in time.", file=sys.stderr)
+    if not _wait_for_port(config.UI_HOST, port):
         server.shutdown()
-        return 1
+        return diagnostics.fatal(
+            config.APP_NAME,
+            f"The local server did not start in time on port {port}.\n\n"
+            f"See the log for details:\n{diagnostics.log_path()}",
+        )
 
     import webview  # imported late so the API can be tested without a GUI
 
     window = webview.create_window(
         config.APP_NAME,
-        f"http://{config.UI_HOST}:{config.PORT}/",
+        f"http://{config.UI_HOST}:{port}/",
         width=1280,
         height=800,
         min_size=(960, 640),
@@ -88,7 +146,34 @@ def main() -> int:
     finally:
         server.shutdown()
         server.join(timeout=5)
+    logger.info("Client stopped")
     return 0
+
+
+def _missing_runtime() -> str | None:
+    """Return an actionable message when a required runtime is absent."""
+    if not preflight.dotnet_available():
+        return (
+            "The .NET Framework 4.6.2 or newer is required to draw the window.\n\n"
+            "Install it from Microsoft, then start the client again."
+        )
+    if not preflight.webview2_available():
+        return (
+            "The Microsoft Edge WebView2 runtime is required to display the interface.\n\n"
+            "Install 'Microsoft Edge WebView2 Runtime' from Microsoft, "
+            "then start the client again."
+        )
+    return None
+
+
+def _selftest_log_argument(args: list[str]) -> str | None:
+    """Read ``--selftest-log <path>`` from the command line, if present."""
+    for index, value in enumerate(args):
+        if value == "--selftest-log" and index + 1 < len(args):
+            return args[index + 1]
+        if value.startswith("--selftest-log="):
+            return value.split("=", 1)[1]
+    return None
 
 
 if __name__ == "__main__":
