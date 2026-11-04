@@ -7,10 +7,9 @@ The client broadcasts a fixed magic payload to the subnet broadcast address on
     response  {"app": "Portable Applications Server", "version": "0.1.0",
                "port": 8756}
 
-The responder is **not implemented in the server yet** — see
-``backend/README.md`` ("Server contract required"). Until it exists, discovery
-fails cleanly and the caller falls back to the URL persisted in
-``data/settings.json``.
+The responder lives in the server (see ``backend/README.md``, "Server contract
+required"). Discovery is still best-effort: when nothing answers, the caller
+falls back to the URL persisted in ``data/settings.json``.
 
 Discovery is best-effort by design: a net café may have several servers, a
 firewall may block broadcast, or the server may be on another subnet. Every
