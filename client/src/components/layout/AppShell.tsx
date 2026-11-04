@@ -10,12 +10,15 @@ interface AppShellProps {
   serverUrl: string
   version: string
   theme: ThemeId
+  /** The Store's search text, shared with the navbar search box. */
+  query: string
   /** Latest shell-level failure, or `null` when there is nothing to report. */
   error?: string | null
   onDismissError?: () => void
   onRetryError?: () => void
   onNavigate: (view: ViewId) => void
   onToggleTheme: () => void
+  onQueryChange: (query: string) => void
   children: ReactNode
 }
 
@@ -29,11 +32,13 @@ export function AppShell({
   serverUrl,
   version,
   theme,
+  query,
   error = null,
   onDismissError,
   onRetryError,
   onNavigate,
   onToggleTheme,
+  onQueryChange,
   children,
 }: AppShellProps) {
   const status = describeConnection(connection)
@@ -45,8 +50,10 @@ export function AppShell({
         connection={connection}
         serverUrl={serverUrl}
         theme={theme}
+        query={query}
         onNavigate={onNavigate}
         onToggleTheme={onToggleTheme}
+        onQueryChange={onQueryChange}
       />
 
       {error && onDismissError && (
