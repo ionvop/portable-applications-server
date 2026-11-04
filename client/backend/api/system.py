@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, current_app, jsonify
 
 from .. import config, paths, settings
 from ..services import state_service
@@ -24,7 +24,7 @@ def system_info():
             "app_name": config.APP_NAME,
             "version": config.VERSION,
             "ui_host": config.UI_HOST,
-            "port": config.PORT,
+            "port": current_app.config.get("CLIENT_PORT", config.PORT),
             "server_url": settings.get_server_url(),
             "data_dir": str(paths.data_dir()),
             "apps_dir": str(paths.apps_dir()),
