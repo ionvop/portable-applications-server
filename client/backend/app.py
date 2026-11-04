@@ -12,12 +12,18 @@ from __future__ import annotations
 
 from flask import Flask, jsonify, send_from_directory
 
-from . import paths
+from . import config, paths
 from .api import apps, catalog, jobs, settings, system, thumbnails
 from .errors import ClientError
 
 
-def create_app() -> Flask:
+def create_app(port: int | None = None) -> Flask:
+    """Build the Flask app.
+
+    ``port`` is the port the caller actually bound. It is reported by
+    ``/api/system/info`` so the UI shows the real address when the preferred
+    port was already taken by another program.
+    """
     web_root = paths.web_dir()
 
     app = Flask(
@@ -26,6 +32,7 @@ def create_app() -> Flask:
         static_url_path="/assets",
     )
     app.config["JSON_SORT_KEYS"] = False
+    app.config["CLIENT_PORT"] = config.PORT if port is None else port
 
     app.register_blueprint(system.bp)
     app.register_blueprint(catalog.bp)
