@@ -3,7 +3,7 @@
 **Steps 1–9 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, and refresh-on-focus.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
-- `smoke_test.py` exercises catalog → install → skip-if-current → force → launch → path guards → remove against a stub server.
+- `smoke_test.py` exercises every endpoint against a stub server — catalog, install (skip-if-current, force, duplicate-attach, partial progress, failure, stale reconcile), jobs, thumbnails (including non-image/empty/oversized), `settings/test`, `settings/discover`, launch, remove, reset, and the SPA fallback — 160 checks in all. `pytest` runs the same suite against a temporary `data/`.
 - `vite.config.ts` already proxies `/api` → `127.0.0.1:8757`, and `npm run dev:api` exists.
 - `types.ts` mirrors the wire exactly, and `src/api/client.ts` is the only fetch layer (`request<T>()`, `ApiError`, typed calls for all 11 endpoints).
 - `App.tsx` fetches `system`, `catalog`, `installs` and `settings` on mount, keeps `loading` / `systemError` / `catalogError` separate, and derives a `ConnectionState` (`connected` / `unreachable` / `unconfigured`) that the navbar, footer and Settings all render.
@@ -16,7 +16,8 @@
 3. ~~**No thumbnail route.**~~ **Done in Step 4** — `GET /api/thumbnails/<name>` proxies and caches covers under `data/thumbnails/`, and `Cover.tsx` renders them with the gradient as fallback.
 4. ~~**Write actions are inert.**~~ **Done in Step 7** — install/verify, Play and trash all
    round-trip through the backend.
-5. **`README.md`'s "Frontend wiring (TODO)" is stale** — it claims `App.tsx` is the Vite starter template.
+5. ~~**`README.md`'s "Frontend wiring (TODO)" is stale**~~ **Done in Step 10** — both READMEs
+   now describe the wired UI.
 
 ---
 
@@ -234,12 +235,51 @@ This is the step that makes the app feel real.
   `layout` and `filter` stay local to `CatalogView` — they are view preferences, not shared state.
 - `npm run build` and `npm run lint` clean.
 
-### Step 10 — Hardening
+### Step 10 — Hardening ✅
 - Extend `smoke_test.py` for jobs, the thumbnail proxy, `settings/test`, and the launch/remove paths.
 - Add a `pytest` wrapper.
 - Fix the stale "Frontend wiring (TODO)" section in `README.md`.
 
 **Done when:** every endpoint is covered and the docs match reality.
+
+**Completed.** Notes on how it landed:
+
+- The four named items were **already covered** by Steps 4–8: jobs (22 checks), the thumbnail
+  proxy (6), `settings/test` (9), and launch/remove/reset. The real gap was
+  `POST /api/settings/discover`, which had **no coverage at all**.
+- `smoke_test.py` grew from 118 to **160 checks**. New sections: `settings/discover` (a reply is
+  returned and persisted with `discovered_at`; silence is a readable `404`), `discovery parsing`
+  (`_parse_reply` with a valid payload, a bad port falling back to `config.SERVER_PORT`, bad
+  JSON and a non-object payload), and `frontend` (index, SPA fallback, `/api/*` left alone, and
+  the `503` + `hint` when `dist/` is missing).
+- Failure paths added: `PUT /api/settings` with a non-object body / missing key / non-string
+  value, `GET /api/catalog` against a dead port (`503` + "could not reach"), a manifest that is
+  a list (`502`), a non-image / empty / oversized thumbnail (`502`, and **not** cached), launch
+  with a deleted executable (`404` + "missing"), an install row pointing outside `data/apps`,
+  and `jobs?limit=0` / `limit=9999` clamping.
+- **`discover` is stubbed, not `discover_and_remember`.** Stubbing the outer function would
+  have skipped the persistence it performs, so the test would have passed while the endpoint
+  silently stopped saving. Stubbing the UDP layer keeps the real write path under test.
+- The oversized-thumbnail check clears the cache first and repopulates it afterwards, because
+  a cache hit would otherwise answer instead of the proxy and the later reset section needs a
+  cover to delete.
+- **`pytest` is a wrapper, not a rewrite.** `backend/tests/test_smoke.py` calls
+  `smoke_test.main()` and turns its `failures` list into a `pytest.fail` message, so the checks
+  cannot drift from the script. A second test asserts the suite leaves no apps, covers or
+  partial downloads behind.
+- **The wrapper isolates data.** A fixture monkeypatches `paths.base_dir` to `tmp_path`, so
+  `pytest` never deletes a developer's real installs, covers or server address. Verified: the
+  `data/` timestamps were byte-identical before and after a run. `python backend/smoke_test.py`
+  keeps its original behaviour of using the real `data/`.
+- `pytest` lives in a new `backend/requirements-dev.txt` (`-r requirements.txt` + `pytest`), so
+  the shipped runtime set stays clean; `pyinstaller.spec` already excludes it from the bundle.
+  `pytest.ini` sets `testpaths = backend/tests` so collection never walks `.venv/` or
+  `node_modules/`.
+- Docs: `README.md`'s `## Status` no longer claims the UI is the Vite starter template, and its
+  `## Checks` section documents `pytest` and the dev install. `backend/README.md`'s
+  `## Frontend wiring` was rewritten from a "Remaining work" checklist into a description of
+  what exists. `discovery_service`'s docstring no longer claims the server responder is
+  unimplemented.
 
 ### Step 11 — Packaging verification
 - `build.bat` already exists; verify the frozen exe serves `dist`, writes `data` beside the exe, and can install/launch from a copied folder.
