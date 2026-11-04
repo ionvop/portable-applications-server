@@ -242,6 +242,39 @@ project root. The spec produces an **onedir** bundle in `release\PortableApplica
 frozen, so the first run creates `data\client.db` beside the exe. Copying the release folder
 therefore carries no stale state.
 
+### Verification
+
+`build.bat` deletes `release\` first (a stale `data\` must never ship), then runs the frozen
+exe's own `--selftest` twice: once in place and once from a copy in `%TEMP%`. The selftest
+(`backend/selftest.py`) asserts, from inside the frozen process:
+
+- `paths.base_dir()` is the directory holding the exe, and `paths.resource_root()` is not;
+- `_internal\dist\index.html` exists and is served, along with the asset it references;
+- `data\` is writable and `client.db` opens;
+- `/`, the SPA fallback, `/api/health`, `/api/system/info`, `/api/apps/installed`,
+  `/api/settings`, `/api/jobs` and `/api/catalog` all answer as the UI expects;
+- a real `make_server` socket binds and answers over HTTP.
+
+The exe is windowed, so the verdict is the exit code plus a report file
+(`--selftest-log <path>`, default `data/selftest.log`) ending in `SELFTEST: PASS` or
+`SELFTEST: FAIL`.
+
+### Startup hardening
+
+`backend/diagnostics.py` and `backend/preflight.py` cover the clean-machine cases:
+
+- **No console.** `sys.stdout`/`sys.stderr` are `None` in a windowed build, so they are
+  pointed at `os.devnull` and every failure goes to `data/client.log` (rotated at 1 MB) and
+  a `MessageBoxW` dialog. `tkinter` is excluded from the bundle, so dialogs use `user32`.
+- **Second launch.** If `/api/system/info` on the configured port reports this application,
+  the client says it is already running and exits `0` instead of dying on a bind error.
+- **Port taken by something else.** `preflight.choose_port()` falls back to an ephemeral
+  port; the UI is same-origin, so nothing breaks, and `/api/system/info` reports the real
+  port via `app.config["CLIENT_PORT"]`.
+- **Missing runtime.** WebView2 (registry `{F3017226-…}`) and .NET Framework 4.6.2+
+  (`NDP\v4\Full` Release ≥ 394802) are checked before the window opens, because pywebview
+  would otherwise fall back to MSHTML and render a blank window.
+
 ## Frontend wiring
 
 The React UI is wired to every endpoint above. The pieces worth knowing about:
