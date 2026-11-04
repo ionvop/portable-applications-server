@@ -98,6 +98,16 @@ def list_jobs(limit: int = 100) -> list[dict[str, Any]]:
     return live + _list_history(limit)
 
 
+def has_active_jobs() -> bool:
+    """Whether any install is still running.
+
+    A bulk reset must not delete directories out from under a worker, so the
+    caller checks this first and refuses instead of racing the download.
+    """
+    with _lock:
+        return bool(_jobs)
+
+
 def get_job(job_id: int) -> dict[str, Any] | None:
     """One job by id, live or historical, or ``None`` when unknown."""
     with _lock:
