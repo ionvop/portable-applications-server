@@ -1,6 +1,6 @@
 ## Current state (verified)
 
-**Steps 1–9 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, and refresh-on-focus.**
+**Steps 1–11 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, refresh-on-focus, and a verified portable Windows build.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
 - `smoke_test.py` exercises every endpoint against a stub server — catalog, install (skip-if-current, force, duplicate-attach, partial progress, failure, stale reconcile), jobs, thumbnails (including non-image/empty/oversized), `settings/test`, `settings/discover`, launch, remove, reset, and the SPA fallback — 160 checks in all. `pytest` runs the same suite against a temporary `data/`.
@@ -18,6 +18,8 @@
    round-trip through the backend.
 5. ~~**`README.md`'s "Frontend wiring (TODO)" is stale**~~ **Done in Step 10** — both READMEs
    now describe the wired UI.
+6. ~~**The packaged build was never verified.**~~ **Done in Step 11** — `build.bat` now builds,
+   self-tests the frozen exe in place and from a copy, and refuses to ship a stale `data/`.
 
 ---
 
@@ -281,16 +283,69 @@ This is the step that makes the app feel real.
   what exists. `discovery_service`'s docstring no longer claims the server responder is
   unimplemented.
 
-### Step 11 — Packaging verification
+### Step 11 — Packaging verification ✅
 - `build.bat` already exists; verify the frozen exe serves `dist`, writes `data` beside the exe, and can install/launch from a copied folder.
 
 **Done when:** the exe runs on a clean machine.
+
+**Completed.** Notes on how it landed:
+
+- **The bundle had never been built.** `release/` did not exist, so nothing about the frozen
+  build had ever been observed. Building it exposed three clean-machine failures that
+  verification alone would not have fixed.
+- **`console=False` made every startup failure invisible.** `main.py` reported a missing
+  `dist/` and a failed bind with `print(..., file=sys.stderr)` — and in a windowed build
+  `sys.stderr` is `None`, so the `print` itself raised. New `backend/diagnostics.py` points
+  `None` std streams at `os.devnull`, writes `data/client.log` (rotated once at 1 MB), shows
+  failures in a `MessageBoxW` dialog, and installs `sys.excepthook` +
+  `threading.excepthook` so an uncaught exception leaves a trace instead of a silent exit.
+  Dialogs use `user32` rather than `tkinter`, which `pyinstaller.spec` excludes.
+- **A second double-click crashed.** Port 8757 was hardcoded, so the second instance died on
+  the bind with a raw traceback dialog. `preflight.existing_instance()` now probes
+  `/api/system/info` and compares `app_name`: our own client → "already running", exit `0`;
+  a *foreign* program on the port → `preflight.choose_port()` picks an ephemeral port and
+  logs it. `create_app(port=...)` stores the bound port in `app.config["CLIENT_PORT"]` so
+  `/api/system/info` reports the truth instead of the constant.
+- **A missing runtime produced a blank window.** pywebview silently falls back to MSHTML
+  (IE11) when WebView2 is absent, which cannot run the modern bundle. `preflight` checks the
+  WebView2 registry key (`{F3017226-…}`, HKLM/WOW6432Node/HKCU) and .NET Framework 4.6.2+
+  (`NDP\v4\Full` Release ≥ 394802) before the window opens, and names what to install.
+- **`build.bat` shipped stale state.** It never deleted `release/`, so a `data/` left by a
+  previous test run would have travelled to every client machine. It now removes `release/`
+  first and deletes the `data/` the selftest creates.
+- **Verification runs inside the frozen process.** `backend/selftest.py` is the only way to
+  assert `paths.base_dir() == Path(sys.executable).parent` — a claim no external probe can
+  make. It checks the frozen path split, `_internal/dist/index.html` plus the asset it
+  references, `data/` writability, `client.db`, the SPA fallback, every read-only endpoint,
+  and a real `make_server` bind. The exe is windowed, so the verdict is the exit code plus a
+  report file ending in `SELFTEST: PASS`/`FAIL`; `build.bat` greps for the marker so a
+  truncated report cannot look green.
+- **Portability is checked, not assumed.** `build.bat` copies the bundle to
+  `%TEMP%\pac-copy-<rand>`, re-runs the selftest there, and asserts `data\client.db` appeared
+  beside the *copied* exe. Verified: the copy reported
+  `base_dir: C:\Users\…\Temp\pac-copy-1506732761` and `resource_root: …\_internal`.
+- **`backend.selftest` is a hidden import.** It is imported lazily inside `main.main`, so
+  static analysis would miss it; the spec lists it explicitly so a refactor cannot silently
+  drop the check the build depends on.
+- **Tests.** `backend/tests/test_selftest.py` fakes `dist/` and asserts the report contents,
+  the failure paths (missing `index.html`, missing asset), and that `main(["--selftest"])`
+  returns before `webview` is imported. `backend/tests/test_startup.py` covers the log file,
+  `fatal`, the `None`-stderr guard, `port_in_use`, `choose_port` (free and taken),
+  `existing_instance` (nothing listening, foreign service) and both runtime probes.
+- **Verified end to end.** `build.bat` exits `0`; the in-place report shows `frozen: True`,
+  `base_dir` = the release folder, `resource_root` = `_internal`, and 22 PASS lines; the copy
+  report shows the same from `%TEMP%`; `release\PortableApplicationsClient\data` is absent
+  afterwards. `pytest` (18 tests) and `smoke_test.py` (160 checks) stay green, `npm run lint`
+  is clean.
+- **Install/launch from a copied folder remains a manual check** against the real server —
+  the automated part cannot fabricate one, and `smoke_test.py` already covers that path
+  against a stub.
 
 ---
 
 ## Suggested order of attack
 
-**Steps 2 → 3 → 4** turn the prototype into a working catalog browser — the biggest visible win for the least risk. **Steps 5 → 6 → 7** are the core promise: install, launch, remove. Steps 8–10 are polish and release work.
+**Steps 2 → 3 → 4** turn the prototype into a working catalog browser — the biggest visible win for the least risk. **Steps 5 → 6 → 7** are the core promise: install, launch, remove. Steps 8–11 are polish and release work.
 
 Two cautions:
 
@@ -298,3 +353,20 @@ Two cautions:
   (`id`, `entry_id`, `title`, `status`, `received_bytes`, `total_bytes`, `error`, timestamps) and
   `DownloadsView` is built against it.
 - **Two prototype features have no backend and need a decision, not code:** the `games`/`apps` category filter (the server publishes no category) and the per-card size/updated columns (only available per-entry via the manifest, which costs one `plan_archive` walk each). Dropping them from the grid and showing size on the detail page is the cheap path; adding `category` and `size_bytes` to the server's public catalog is the cross-repo path.
+
+---
+
+## Remaining manual check
+
+Everything automated is green. One thing cannot be automated because it needs a real
+Portable Applications Server on the LAN:
+
+1. Copy `release\PortableApplicationsClient` to a clean machine (or a fresh folder).
+2. Run `PortableApplicationsClient.exe` — the window opens and `data\` appears beside it.
+3. Set the server address in Settings (or use **Discover on LAN**).
+4. Install an application, watch the progress bar, then **Play** it.
+5. Confirm the game keeps running after the client window is closed.
+6. Double-click the exe again while it is open — it should say the client is already running
+   rather than crash.
+
+If anything fails, `data\client.log` beside the exe records what happened.
