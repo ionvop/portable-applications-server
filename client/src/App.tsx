@@ -67,6 +67,12 @@ function App() {
   const [installs, setInstalls] = useState<Install[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
+  /**
+   * The Store's search text. It lives here rather than in `CatalogView`
+   * because the navbar search edits the same query, so the two inputs cannot
+   * disagree about what is being filtered.
+   */
+  const [catalogQuery, setCatalogQuery] = useState("")
 
   const [loading, setLoading] = useState(true)
   /** The client backend itself is down — nothing can be rendered. */
@@ -91,6 +97,9 @@ function App() {
   // A single failed poll is transient (the next tick retries in one second), so
   // it stays quiet. Only a run of failures means the backend is really gone.
   const pollFailures = useRef(0)
+
+  // Timestamp of the last focus-triggered refresh, used to throttle it.
+  const lastFocusRefresh = useRef(0)
 
   // daisyUI reads the theme from the document element, so mirror state there.
   useEffect(() => {
@@ -218,6 +227,55 @@ function App() {
     if (finished.length > 0) void refreshAfterInstall()
   }, [refreshAfterInstall])
 
+  /**
+   * Re-read the local install list, the catalog and the job list when the
+   * window regains focus.
+   *
+   * The client is a desktop app, so this fires when the user alt-tabs back from
+   * a launched game — exactly the moment the Library may have changed
+   * underneath them (an install finished while the window was in the
+   * background, or the administrator edited the catalog server-side).
+   */
+  const refreshOnFocus = useCallback(async () => {
+    // Without a server address the catalog request is pointless, so it is
+    // skipped rather than allowed to fail and paint an error card.
+    const catalogRequest: Promise<CatalogApp[] | null> = system?.server_url
+      ? getCatalog()
+      : Promise.resolve(null)
+
+    const [installsResult, catalogResult, jobsResult] = await Promise.allSettled([
+      getInstalled(),
+      catalogRequest,
+      getJobs(),
+    ])
+
+    if (installsResult.status === "fulfilled") {
+      setInstalls(installsResult.value)
+    } else {
+      setActionError(
+        messageFor(installsResult.reason, "Could not refresh the installed applications."),
+      )
+    }
+
+    if (catalogResult.status === "fulfilled") {
+      // `null` means the request was skipped, not that the catalog is empty.
+      if (catalogResult.value) {
+        setCatalog(catalogResult.value)
+        setCatalogError(null)
+      }
+    } else {
+      setCatalogError(messageFor(catalogResult.reason, "Could not refresh the catalog."))
+    }
+
+    if (jobsResult.status === "fulfilled") {
+      const next = jobsResult.value
+      activeJobIds.current = new Set(next.filter(isActiveJob).map((job) => job.id))
+      setJobs(next)
+    } else {
+      setActionError(messageFor(jobsResult.reason, "Could not refresh the transfer history."))
+    }
+  }, [system?.server_url])
+
   // Only poll while something is actually running: an idle client makes no
   // requests at all.
   const jobsRunning = hasActiveJobs(jobs)
@@ -230,14 +288,60 @@ function App() {
   }, [jobsRunning, refreshJobs])
 
   /** Re-run the load from a clean slate, used by the error cards' Retry. */
-  const retry = () => {
+  const retry = useCallback(() => {
     setLoading(true)
     setSystemError(null)
     setCatalogError(null)
     setActionError(null)
     pollFailures.current = 0
     void load()
-  }
+  }, [load])
+
+  // Seed the throttle with the mount time so the window's initial focus (and
+  // the `visible` visibility event some renderers fire on load) cannot
+  // duplicate the `load()` that is already running.
+  useEffect(() => {
+    lastFocusRefresh.current = Date.now()
+  }, [])
+
+  /**
+   * Refresh when the window regains focus.
+   *
+   * Four guards keep this from becoming a request storm: a hidden document is
+   * ignored (the `visibilitychange` half of the pair), a running job is left to
+   * the one-second poll that already owns that window, a full `load()` in
+   * flight is not raced, and a refresh within `FOCUS_REFRESH_MS` of the
+   * previous one is dropped, so clicking around the window cannot fire a
+   * request per click.
+   */
+  useEffect(() => {
+    const FOCUS_REFRESH_MS = 5000
+
+    const maybeRefresh = () => {
+      if (document.visibilityState === "hidden") return
+      if (jobsRunning || loading) return
+
+      const now = Date.now()
+      if (now - lastFocusRefresh.current < FOCUS_REFRESH_MS) return
+      lastFocusRefresh.current = now
+
+      // A backend that died while the window was in the background recovers
+      // through the full load, which also clears the full-screen error.
+      if (systemError) {
+        retry()
+        return
+      }
+
+      void refreshOnFocus()
+    }
+
+    window.addEventListener("focus", maybeRefresh)
+    document.addEventListener("visibilitychange", maybeRefresh)
+    return () => {
+      window.removeEventListener("focus", maybeRefresh)
+      document.removeEventListener("visibilitychange", maybeRefresh)
+    }
+  }, [jobsRunning, loading, refreshOnFocus, retry, systemError])
 
   /**
    * Connection state is derived, not probed: an empty address means nothing is
@@ -351,6 +455,16 @@ function App() {
     setView(next)
   }
 
+  /**
+   * The navbar search and the Store's search are one query. Typing in the
+   * navbar jumps to the Store so the results are actually visible; clearing it
+   * leaves the user where they are.
+   */
+  const handleCatalogQueryChange = (next: string) => {
+    setCatalogQuery(next)
+    if (next.trim() && view !== "catalog") navigate("catalog")
+  }
+
   const openApp = (app: CatalogApp) => {
     setSelectedApp(app)
     setView("app")
@@ -413,11 +527,13 @@ function App() {
       serverUrl={system.server_url}
       version={system.version}
       theme={theme}
+      query={catalogQuery}
       error={actionError}
       onDismissError={() => setActionError(null)}
       onRetryError={retry}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
+      onQueryChange={handleCatalogQueryChange}
     >
       {view !== "app" && (
         <header className="mb-5">
@@ -438,7 +554,12 @@ function App() {
             <span className="loading loading-spinner loading-lg" aria-label="Loading catalog" />
           </div>
         ) : (
-          <CatalogView apps={catalog} onOpenApp={openApp} />
+          <CatalogView
+            apps={catalog}
+            query={catalogQuery}
+            onQueryChange={handleCatalogQueryChange}
+            onOpenApp={openApp}
+          />
         ))}
 
       {view === "app" && detailApp && (
