@@ -3,7 +3,8 @@ import type { ConnectionState, Settings, SystemInfo, ThemeId } from "../types"
 import { ApiError, discoverServer, getSettings, testConnection, updateSettings } from "../api/client"
 import { describeConnection } from "../lib/connection"
 import { formatRelativeTime } from "../lib/format"
-import { CheckIcon, RefreshIcon, SearchIcon, ServerIcon } from "../components/icons"
+import { ConfirmDialog } from "../components/ConfirmDialog"
+import { CheckIcon, RefreshIcon, SearchIcon, ServerIcon, TrashIcon } from "../components/icons"
 
 interface SettingsViewProps {
   system: SystemInfo
@@ -13,10 +14,12 @@ interface SettingsViewProps {
   onToggleTheme: () => void
   /** Called with the authoritative settings after a save or a discovery. */
   onSettingsSaved: (settings: Settings) => void
+  /** Deletes every install, cached cover and transfer record. */
+  onResetStorage: () => Promise<{ removed: number }>
 }
 
 /** Which connection action is in flight, so only that button shows a spinner. */
-type BusyAction = "save" | "discover" | "test" | null
+type BusyAction = "save" | "discover" | "test" | "reset" | null
 
 /** Turns any thrown value into text the UI can show. */
 function messageFor(cause: unknown, fallback: string): string {
@@ -38,6 +41,7 @@ export function SettingsView({
   theme,
   onToggleTheme,
   onSettingsSaved,
+  onResetStorage,
 }: SettingsViewProps) {
   const status = describeConnection(connection)
 
@@ -45,6 +49,12 @@ export function SettingsView({
   const [busy, setBusy] = useState<BusyAction>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // The reset card keeps its own outcome lines: a failed reset is unrelated to
+  // the address field, and mixing them would clear one when the other runs.
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [resetNotice, setResetNotice] = useState<string | null>(null)
+  const [confirmingReset, setConfirmingReset] = useState(false)
 
   const value = draft ?? settings.server_url
   const dirty = draft !== null && draft.trim().replace(/\/+$/, "") !== settings.server_url
@@ -99,6 +109,25 @@ export function SettingsView({
       setNotice(`The server at ${result.server_url} answered.`)
     } catch (cause) {
       setError(messageFor(cause, "The server did not answer."))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const reset = async () => {
+    setBusy("reset")
+    setResetError(null)
+    setResetNotice(null)
+    try {
+      const result = await onResetStorage()
+      setConfirmingReset(false)
+      setResetNotice(
+        result.removed === 0
+          ? "There was nothing to remove."
+          : `Removed ${result.removed} application${result.removed === 1 ? "" : "s"} and the cached files.`,
+      )
+    } catch (cause) {
+      setResetError(messageFor(cause, "The local storage could not be reset."))
     } finally {
       setBusy(null)
     }
@@ -271,20 +300,61 @@ export function SettingsView({
       </div>
 
       <div className="card border border-base-300 bg-base-200">
-        <div className="card-body flex-row flex-wrap items-center gap-3">
-          <ServerIcon width={18} height={18} className="text-base-content/50" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Reset local storage</p>
-            <p className="text-xs text-base-content/60">
-              Removes downloaded apps and cached metadata from this computer.
-            </p>
+        <div className="card-body gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <ServerIcon width={18} height={18} className="text-base-content/50" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Reset local storage</p>
+              <p className="text-xs text-base-content/60">
+                Removes downloaded apps, cached covers and transfer history from this computer.
+                The server address is kept.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-sm btn-error btn-outline gap-2"
+              onClick={() => {
+                setResetError(null)
+                setResetNotice(null)
+                setConfirmingReset(true)
+              }}
+              disabled={busy !== null}
+            >
+              {busy === "reset" ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                <TrashIcon width={14} height={14} />
+              )}
+              Reset local storage
+            </button>
           </div>
-          <button type="button" className="btn btn-sm btn-error btn-outline gap-2" disabled>
-            <CheckIcon width={14} height={14} />
-            Unavailable in prototype
-          </button>
+
+          {resetError && (
+            <p role="alert" className="text-xs text-error">
+              {resetError}
+            </p>
+          )}
+          {resetNotice && !resetError && (
+            <p role="status" className="text-xs text-success">
+              {resetNotice}
+            </p>
+          )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmingReset}
+        title="Reset local storage?"
+        message={
+          system.installed_count === 0
+            ? "No applications are installed. The cached covers and transfer history will still be cleared."
+            : `All ${system.installed_count} installed application${system.installed_count === 1 ? "" : "s"}, their files, the cached covers and the transfer history will be deleted from this computer. They can be installed again from the Store.`
+        }
+        confirmLabel="Reset"
+        busy={busy === "reset"}
+        onConfirm={() => void reset()}
+        onCancel={() => setConfirmingReset(false)}
+      />
     </div>
   )
 }
