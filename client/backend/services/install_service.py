@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
-from .. import config, paths
+from .. import config, db, paths
 from ..errors import ClientError
 from ..models import Install
 from . import server_client, state_service
@@ -106,6 +106,53 @@ def remove_installed(entry_id: int) -> bool:
         shutil.rmtree(directory, ignore_errors=True)
     state_service.remove_install(entry_id)
     return True
+
+
+def reset_local_storage() -> int:
+    """Delete every install, cached cover and partial download.
+
+    This is the bulk counterpart of :func:`remove_installed`, backing the
+    Settings screen's "Reset local storage" action. It refuses to run while an
+    install is in flight: the worker is writing into ``data/apps`` and
+    ``data/tmp``, so deleting those trees mid-transfer would fail the job with
+    a confusing error instead of a clear one.
+
+    Returns the number of install rows removed.
+    """
+    # Imported here because ``job_service`` imports this module at load time;
+    # a module-level import would be circular.
+    from . import job_service
+
+    if job_service.has_active_jobs():
+        raise ClientError(
+            "An install is still running. Wait for it to finish, then reset.",
+            status=409,
+        )
+
+    installs = state_service.list_installs()
+    apps_root = paths.apps_dir()
+    for install in installs:
+        directory = apps_root / install.directory
+        # Guard against a corrupted row pointing outside the apps folder.
+        if _is_inside(directory, apps_root):
+            shutil.rmtree(directory, ignore_errors=True)
+
+    removed = state_service.clear_installs()
+
+    # Cached covers are keyed by a server-generated filename, so they are pure
+    # cache: dropping them costs one re-fetch and nothing else.
+    thumbnails = paths.thumbnails_dir()
+    shutil.rmtree(thumbnails, ignore_errors=True)
+    thumbnails.mkdir(parents=True, exist_ok=True)
+
+    for leftover in paths.tmp_dir().glob("*.zip"):
+        _remove_quietly(leftover)
+
+    # Transfer history describes installs that no longer exist, so it goes too.
+    with db.get_connection() as connection:
+        connection.execute("DELETE FROM transfers")
+
+    return removed
 
 
 def sweep_stale_downloads() -> int:
