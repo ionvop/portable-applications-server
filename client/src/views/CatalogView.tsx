@@ -5,6 +5,12 @@ import { DownloadIcon, GridIcon, ListIcon, PlayIcon, SearchIcon } from "../compo
 
 interface CatalogViewProps {
   apps: CatalogApp[]
+  /**
+   * The search text. Owned by `App` because the navbar search box edits the
+   * same query, so the two inputs stay in sync.
+   */
+  query: string
+  onQueryChange: (query: string) => void
   onOpenApp: (app: CatalogApp) => void
 }
 
@@ -18,9 +24,8 @@ const filters: { id: Filter; label: string }[] = [
 ]
 
 /** Storefront: browse the catalog, filter it, and open an app. */
-export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
+export function CatalogView({ apps, query, onQueryChange, onOpenApp }: CatalogViewProps) {
   const [layout, setLayout] = useState<Layout>("grid")
-  const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
 
   const visible = useMemo(() => {
@@ -48,7 +53,7 @@ export function CatalogView({ apps, onOpenApp }: CatalogViewProps) {
             type="search"
             placeholder="Search by title or description…"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => onQueryChange(event.target.value)}
           />
         </label>
 
