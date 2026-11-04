@@ -65,6 +65,17 @@ def remove_install(entry_id: int) -> bool:
         return cursor.rowcount > 0
 
 
+def clear_installs() -> int:
+    """Delete every install row. Returns how many rows were removed.
+
+    Used by the bulk "reset local storage" action, which wipes the whole
+    library rather than one entry at a time.
+    """
+    with db.get_connection() as connection:
+        cursor = connection.execute("DELETE FROM installs")
+        return cursor.rowcount
+
+
 def install_map() -> dict[int, dict[str, Any]]:
     """``{entry_id: install_dict}`` for annotating a catalog listing."""
     return {install.entry_id: install.to_dict() for install in list_installs()}
