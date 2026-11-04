@@ -17,6 +17,9 @@ import {
   getJobs,
   getSettings,
   getSystemInfo,
+  installApp,
+  launchApp,
+  removeApp,
 } from "./api/client"
 import { hasActiveJobs, isActiveJob } from "./lib/jobs"
 import { AppShell } from "./components/layout/AppShell"
@@ -252,6 +255,37 @@ function App() {
       })
   }
 
+  /**
+   * Start an install (or a forced re-download) and adopt the returned job.
+   *
+   * The job is registered locally as well as in the backend, because the poll
+   * loop only runs while `jobs` holds an active job: without this the progress
+   * bar would never start and the completion refresh would never fire.
+   */
+  const startInstall = async (entryId: number, force = false): Promise<Job> => {
+    const job = await installApp(entryId, force)
+    setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)])
+
+    if (isActiveJob(job)) {
+      activeJobIds.current.add(job.id)
+    } else {
+      // The worker finished before the response was serialized (a tiny app, or
+      // an entry that was already current). No poll will ever observe the
+      // transition, so refresh here instead of leaving the UI stale.
+      void refreshAfterInstall()
+    }
+    return job
+  }
+
+  /** Launch an installed application; the backend detaches the process. */
+  const startLaunch = (entryId: number) => launchApp(entryId)
+
+  /** Remove an install and its files, then refresh the Library and the Store. */
+  const removeInstall = async (entryId: number): Promise<void> => {
+    await removeApp(entryId)
+    await refreshAfterInstall()
+  }
+
   const navigate = (next: ViewId) => {
     if (next !== "app") setSelectedApp(null)
     setView(next)
@@ -283,6 +317,13 @@ function App() {
   }
 
   const meta = pageMeta[view]
+
+  // `selectedApp` is a snapshot taken when the row was clicked, so it goes
+  // stale as soon as an install finishes. Prefer the freshly fetched catalog
+  // row and fall back to the snapshot when the entry is no longer listed.
+  const detailApp = selectedApp
+    ? (catalog.find((app) => app.id === selectedApp.id) ?? selectedApp)
+    : null
 
   if (systemError) {
     return (
@@ -337,8 +378,17 @@ function App() {
           <CatalogView apps={catalog} onOpenApp={openApp} />
         ))}
 
-      {view === "app" && selectedApp && (
-        <AppDetailView app={selectedApp} onBack={() => navigate("catalog")} />
+      {view === "app" && detailApp && (
+        <AppDetailView
+          app={detailApp}
+          install={installs.find((item) => item.entry_id === detailApp.id)}
+          job={jobs.find(
+            (item) => item.entry_id === detailApp.id && isActiveJob(item),
+          )}
+          onBack={() => navigate("catalog")}
+          onInstall={(force) => startInstall(detailApp.id, force)}
+          onLaunch={() => startLaunch(detailApp.id)}
+        />
       )}
 
       {view === "library" && (
@@ -348,6 +398,8 @@ function App() {
           onOpenApp={openApp}
           onOpenInstall={openInstall}
           onBrowse={() => navigate("catalog")}
+          onLaunch={startLaunch}
+          onRemove={removeInstall}
         />
       )}
 
