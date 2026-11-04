@@ -12,6 +12,7 @@ import io
 import json
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import zipfile
@@ -20,11 +21,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from backend import db, paths, settings
+from backend import config, db, paths, settings
 from backend.app import create_app
 from backend.errors import ClientError
 from backend.models import Install
 from backend.services import (
+    discovery_service,
     install_service,
     job_service,
     launch_service,
@@ -129,11 +131,16 @@ class StubHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(ARCHIVE)
         elif self.path == f"/api/files/thumbnail/{THUMBNAIL_NAME}":
-            self.send_response(200)
-            self.send_header("Content-Type", "image/png")
-            self.send_header("Content-Length", str(len(THUMBNAIL_BYTES)))
-            self.end_headers()
-            self.wfile.write(THUMBNAIL_BYTES)
+            self._bytes(THUMBNAIL_BYTES, "image/png")
+        elif self.path == "/api/files/thumbnail/notimage.txt":
+            # A 200 that is not an image: the proxy must refuse to cache it.
+            self._bytes(b"not an image", "text/plain")
+        elif self.path == "/api/files/thumbnail/empty.png":
+            # A 200 with no body: also refused rather than cached as a blank.
+            self._bytes(b"", "image/png")
+        elif self.path == "/api/client/catalog/998/manifest":
+            # A list where a manifest object is expected.
+            self._json([{"id": 998}])
         elif self.path == "/api/client/catalog/999/manifest":
             self._json({"error": "Catalog entry 999 not found."}, status=404)
         else:
@@ -143,6 +150,13 @@ class StubHandler(BaseHTTPRequestHandler):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _bytes(self, body: bytes, content_type: str) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -199,6 +213,16 @@ def main() -> int:
         )
         settings.set_server_url(server_url)  # restore for the rest of the run
 
+        # The body must be an object carrying a string, not a bare value.
+        response = client.put("/api/settings", json=["http://10.0.0.5:8756"])
+        check("settings rejects a non-object body", response.status_code == 400, response.status_code)
+
+        response = client.put("/api/settings", json={})
+        check("settings rejects a missing url", response.status_code == 400, response.status_code)
+
+        response = client.put("/api/settings", json={"server_url": 42})
+        check("settings rejects a non-string url", response.status_code == 400, response.status_code)
+
         print("settings/test")
         response = client.post("/api/settings/test", json={"server_url": server_url})
         check("test connection returns 200", response.status_code == 200, response.status_code)
@@ -243,6 +267,88 @@ def main() -> int:
             settings.get_server_url(),
         )
 
+        print("settings/discover")
+        # Discovery is a UDP broadcast, which a loopback test cannot rely on, so
+        # the service is stubbed. What matters here is the endpoint contract:
+        # a reply is persisted and returned, and silence is a readable 404.
+        # ``discover`` is stubbed rather than ``discover_and_remember`` so the
+        # real persistence path (and ``discovered_at``) is exercised.
+        original_discover = discovery_service.discover
+        discovered = {
+            "server_url": "http://192.168.254.106:8756",
+            "app": "Portable Applications Server",
+            "version": "0.1.0",
+            "host": "192.168.254.106",
+        }
+        try:
+            discovery_service.discover = lambda *a, **k: dict(discovered)
+            response = client.post("/api/settings/discover")
+            check("discover returns 200", response.status_code == 200, response.status_code)
+            check(
+                "discover returns the reply",
+                response.get_json()["server_url"] == discovered["server_url"],
+                response.get_json(),
+            )
+            check(
+                "discover persists the address",
+                settings.get_server_url() == discovered["server_url"],
+                settings.get_server_url(),
+            )
+            check(
+                "discover records when it happened",
+                bool(settings.load()["discovered_at"]),
+                settings.load(),
+            )
+
+            discovery_service.discover = lambda *a, **k: None
+            response = client.post("/api/settings/discover")
+            check("discover with no reply returns 404", response.status_code == 404, response.status_code)
+            check(
+                "discover with no reply explains itself",
+                "no server answered" in response.get_json()["error"].lower(),
+                response.get_json(),
+            )
+        finally:
+            discovery_service.discover = original_discover
+            settings.set_server_url(server_url)
+
+        print("discovery parsing")
+        reply = discovery_service._parse_reply(
+            json.dumps({"app": "Server", "version": "1.2.3", "port": 9000}).encode(),
+            ("10.0.0.7", 8758),
+        )
+        check("discovery reply parsed", reply is not None, reply)
+        check(
+            "discovery reply builds the url",
+            reply is not None and reply["server_url"] == "http://10.0.0.7:9000",
+            reply,
+        )
+        check(
+            "discovery reply keeps the app name",
+            reply is not None and reply["app"] == "Server",
+            reply,
+        )
+
+        # A bad port falls back to the configured default rather than failing.
+        reply = discovery_service._parse_reply(
+            json.dumps({"port": "not a port"}).encode(), ("10.0.0.7", 8758)
+        )
+        check(
+            "discovery reply falls back to the default port",
+            reply is not None
+            and reply["server_url"] == f"http://10.0.0.7:{config.SERVER_PORT}",
+            reply,
+        )
+
+        check(
+            "discovery ignores malformed json",
+            discovery_service._parse_reply(b"not json", ("10.0.0.7", 8758)) is None,
+        )
+        check(
+            "discovery ignores a non-object payload",
+            discovery_service._parse_reply(b"[1, 2]", ("10.0.0.7", 8758)) is None,
+        )
+
         print("catalog")
         response = client.get("/api/catalog")
         entries = response.get_json()
@@ -263,6 +369,23 @@ def main() -> int:
             "not found" in response.get_json()["error"].lower(),
             response.get_json(),
         )
+
+        # A manifest that is not an object is an upstream fault, not a 404.
+        response = client.get("/api/catalog/998")
+        check("malformed manifest returns 502", response.status_code == 502, response.status_code)
+
+        # With the server unreachable the catalog must fail readably, not hang.
+        settings.set_server_url("http://127.0.0.1:1")
+        try:
+            response = client.get("/api/catalog")
+            check("catalog with a dead server returns 503", response.status_code == 503, response.status_code)
+            check(
+                "catalog with a dead server explains itself",
+                "could not reach" in response.get_json()["error"].lower(),
+                response.get_json(),
+            )
+        finally:
+            settings.set_server_url(server_url)
 
         print("thumbnails")
         cached = paths.thumbnails_dir() / THUMBNAIL_NAME
@@ -300,6 +423,34 @@ def main() -> int:
         response = client.get("/api/thumbnails/missing.png")
         check("missing thumbnail returns 404", response.status_code == 404, response.status_code)
 
+        # A 200 that is not an image must not be cached as a cover.
+        response = client.get("/api/thumbnails/notimage.txt")
+        check("non-image thumbnail returns 502", response.status_code == 502, response.status_code)
+        check(
+            "non-image thumbnail is not cached",
+            not (paths.thumbnails_dir() / "notimage.txt").exists(),
+        )
+
+        response = client.get("/api/thumbnails/empty.png")
+        check("empty thumbnail returns 502", response.status_code == 502, response.status_code)
+
+        # An oversized cover is refused rather than written to disk. The cache
+        # is cleared first, otherwise the earlier hit would answer instead.
+        cached.unlink(missing_ok=True)
+        original_max = server_client.MAX_COVER_BYTES
+        server_client.MAX_COVER_BYTES = 8
+        try:
+            response = client.get(f"/api/thumbnails/{THUMBNAIL_NAME}")
+            check("oversized thumbnail returns 502", response.status_code == 502, response.status_code)
+            check("oversized thumbnail is not cached", not cached.exists())
+        finally:
+            server_client.MAX_COVER_BYTES = original_max
+
+        # Restore the cache the oversized check cleared, so the reset section
+        # below still has a cover to delete.
+        response = client.get(f"/api/thumbnails/{THUMBNAIL_NAME}")
+        check("thumbnail cache repopulated", response.status_code == 200 and cached.is_file())
+
         print("install")
         response = client.post(f"/api/apps/{ENTRY_ID}/install")
         check("install returns 202", response.status_code == 202, response.status_code)
@@ -333,6 +484,13 @@ def main() -> int:
         response = client.get("/api/catalog")
         check("catalog now reports installed", response.get_json()[0]["installed"] is True)
 
+        response = client.get("/api/system/info")
+        check(
+            "system info counts the install",
+            response.get_json()["installed_count"] == 1,
+            response.get_json(),
+        )
+
         print("jobs")
         response = client.get("/api/jobs")
         jobs = response.get_json()
@@ -349,6 +507,14 @@ def main() -> int:
 
         response = client.get("/api/jobs?limit=abc")
         check("bad job limit rejected", response.status_code == 400, response.status_code)
+
+        # The limit is clamped rather than rejected, so a silly value is safe.
+        response = client.get("/api/jobs?limit=0")
+        check("zero job limit returns 200", response.status_code == 200, response.status_code)
+        check("zero job limit clamps to one", len(response.get_json()) == 1, response.get_json())
+
+        response = client.get("/api/jobs?limit=9999")
+        check("huge job limit returns 200", response.status_code == 200, response.status_code)
 
         # A second install with the same version must not re-download.
         calls: list[int] = []
@@ -493,6 +659,18 @@ def main() -> int:
         response = client.post("/api/apps/999/launch")
         check("launch uninstalled returns 404", response.status_code == 404, response.status_code)
 
+        # A recorded install whose executable vanished must say so, not crash.
+        executable_path = app_dir / ENTRY_EXECUTABLE
+        executable_path.unlink()
+        response = client.post(f"/api/apps/{ENTRY_ID}/launch")
+        check("launch with a missing exe returns 404", response.status_code == 404, response.status_code)
+        check(
+            "launch with a missing exe explains itself",
+            "missing" in response.get_json()["error"].lower(),
+            response.get_json(),
+        )
+        executable_path.write_bytes(b"MZ fake executable")
+
         print("path guards")
         for bad in ("../escape.exe", "C:/Windows/system32/cmd.exe", "/abs/path.exe"):
             try:
@@ -514,6 +692,21 @@ def main() -> int:
             check("rejects zip-slip member", False, "no error raised")
         except ClientError:
             check("rejects zip-slip member", True)
+
+        # A corrupted install row pointing outside data/apps must be refused.
+        try:
+            launch_service.resolve_executable(
+                Install(
+                    entry_id=1,
+                    title="Bad",
+                    directory="../..",
+                    executable="game.exe",
+                    version="1",
+                )
+            )
+            check("rejects an install directory outside apps", False, "no error raised")
+        except ClientError:
+            check("rejects an install directory outside apps", True)
 
         print("remove")
         response = client.delete(f"/api/apps/{ENTRY_ID}")
@@ -576,6 +769,48 @@ def main() -> int:
         response = client.get("/api/does-not-exist")
         check("unknown api returns 404", response.status_code == 404, response.status_code)
         check("unknown api is json", response.get_json() == {"error": "Not found."})
+
+        # The built frontend is served from ``paths.web_dir()``. A temporary
+        # web root proves the index, the SPA fallback and the missing-build
+        # hint without depending on ``npm run build`` having been run.
+        original_web_dir = paths.web_dir
+        with tempfile.TemporaryDirectory() as web_root:
+            root = Path(web_root)
+            (root / "index.html").write_text("<html>client</html>", encoding="utf-8")
+            paths.web_dir = lambda: root
+            try:
+                web_client = create_app().test_client()
+                response = web_client.get("/")
+                check("index returns 200", response.status_code == 200, response.status_code)
+                check("index serves the html", b"client" in response.data, response.data[:40])
+
+                response = web_client.get("/library")
+                check("spa fallback returns 200", response.status_code == 200, response.status_code)
+                check("spa fallback serves the html", b"client" in response.data)
+
+                response = web_client.get("/api/does-not-exist")
+                check(
+                    "spa fallback leaves api paths alone",
+                    response.status_code == 404 and response.is_json,
+                    response.status_code,
+                )
+            finally:
+                paths.web_dir = original_web_dir
+
+        # Without a build the app must explain itself instead of 404ing.
+        with tempfile.TemporaryDirectory() as empty_root:
+            paths.web_dir = lambda: Path(empty_root)
+            try:
+                web_client = create_app().test_client()
+                response = web_client.get("/")
+                check("missing frontend returns 503", response.status_code == 503, response.status_code)
+                check(
+                    "missing frontend carries a hint",
+                    "npm run build" in response.get_json().get("hint", ""),
+                    response.get_json(),
+                )
+            finally:
+                paths.web_dir = original_web_dir
 
     finally:
         stub.shutdown()
