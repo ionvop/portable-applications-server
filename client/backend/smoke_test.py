@@ -524,6 +524,54 @@ def main() -> int:
         response = client.delete(f"/api/apps/{ENTRY_ID}")
         check("remove twice returns 404", response.status_code == 404, response.status_code)
 
+        print("reset local storage")
+        # Reinstall so the bulk reset has something to delete.
+        response = client.post(f"/api/apps/{ENTRY_ID}/install")
+        reinstalled = wait_for_job(client, response.get_json()["id"])
+        check("reinstall before reset completes", reinstalled["status"] == "completed", reinstalled)
+        check("install row exists before reset", state_service.get_install(ENTRY_ID) is not None)
+        check("app directory exists before reset", app_dir.is_dir())
+        check("thumbnail cache is populated", any(paths.thumbnails_dir().iterdir()))
+
+        # A reset must refuse while a worker is writing into the same trees.
+        reset_release = threading.Event()
+
+        def parked_download(entry_id, destination, server_url=None, progress=None):
+            reset_release.wait(timeout=5)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(ARCHIVE)
+            return destination
+
+        server_client.download_archive = parked_download
+        try:
+            response = client.post(f"/api/apps/{ENTRY_ID}/install", json={"force": True})
+            parked = response.get_json()
+            response = client.delete("/api/apps")
+            check("reset during an install returns 409", response.status_code == 409, response.status_code)
+            check(
+                "reset during an install explains itself",
+                "still running" in response.get_json()["error"].lower(),
+                response.get_json(),
+            )
+            check("refused reset keeps the install row", state_service.get_install(ENTRY_ID) is not None)
+        finally:
+            reset_release.set()
+            server_client.download_archive = original_download
+            wait_for_job(client, parked["id"])
+
+        response = client.delete("/api/apps")
+        check("reset returns 200", response.status_code == 200, response.status_code)
+        check("reset reports one removal", response.get_json()["removed"] == 1, response.get_json())
+        check("reset deletes the install row", state_service.get_install(ENTRY_ID) is None)
+        check("reset deletes the app directory", not app_dir.exists())
+        check("reset clears the thumbnail cache", not any(paths.thumbnails_dir().iterdir()))
+        check("reset clears the transfer history", client.get("/api/jobs").get_json() == [])
+        check("reset keeps the server address", settings.get_server_url() == server_url)
+
+        response = client.delete("/api/apps")
+        check("reset twice returns 200", response.status_code == 200, response.status_code)
+        check("second reset removes nothing", response.get_json()["removed"] == 0, response.get_json())
+
         print("frontend")
         response = client.get("/api/does-not-exist")
         check("unknown api returns 404", response.status_code == 404, response.status_code)
