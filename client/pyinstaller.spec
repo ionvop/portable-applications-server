@@ -13,6 +13,7 @@ Layout produced in ``release/PortableApplicationsClient/``::
         apps/                     <- downloaded applications and games
         tmp/                      <- in-flight downloads
         client.db                 <- install state
+        client.log                <- startup log (windowed build has no console)
         settings.json             <- server address
 
 Two rules keep the build portable:
@@ -24,6 +25,10 @@ Two rules keep the build portable:
 
 The build is *onedir*: the executable starts instantly and the bundled files can
 be inspected, at the cost of shipping a folder instead of a single file.
+
+``build.bat`` verifies the result by running ``PortableApplicationsClient.exe
+--selftest`` in place and again from a copy in ``%TEMP%``; the exe is windowed,
+so the verdict travels in the exit code and in ``data/selftest.log``.
 """
 
 from pathlib import Path
@@ -48,6 +53,10 @@ hiddenimports = collect_submodules("webview") + [
     "webview.platforms.winforms",
     "clr_loader",
     "pythonnet",
+    # Imported lazily inside ``main.main`` so a normal start never pays for it.
+    # Listed explicitly so a future refactor cannot silently drop the selftest
+    # that ``build.bat`` depends on.
+    "backend.selftest",
 ]
 
 # Modules that are never used and only bloat the bundle.
