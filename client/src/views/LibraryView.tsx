@@ -1,5 +1,8 @@
-import type { CatalogApp, Install } from "../types"
+import { useState } from "react"
+import type { CatalogApp, Install, LaunchResult } from "../types"
+import { ApiError } from "../api/client"
 import { Cover } from "../components/Cover"
+import { ConfirmDialog } from "../components/ConfirmDialog"
 import { formatRelativeTime } from "../lib/format"
 import { DownloadIcon, LibraryIcon, PlayIcon, TrashIcon } from "../components/icons"
 
@@ -11,6 +14,21 @@ interface LibraryViewProps {
   onOpenApp: (app: CatalogApp) => void
   onOpenInstall: (install: Install) => void
   onBrowse: () => void
+  /** Starts an installed application. */
+  onLaunch: (entryId: number) => Promise<LaunchResult>
+  /** Deletes the install row and its files. */
+  onRemove: (entryId: number) => Promise<void>
+}
+
+/** Which row is mid-action, so only that row shows a spinner. */
+interface RowBusy {
+  entryId: number
+  action: "launch" | "remove"
+}
+
+/** Turns any thrown value into text the UI can show. */
+function messageFor(cause: unknown, fallback: string): string {
+  return cause instanceof ApiError ? cause.message : fallback
 }
 
 /**
@@ -24,13 +42,52 @@ export function LibraryView({
   onOpenApp,
   onOpenInstall,
   onBrowse,
+  onLaunch,
+  onRemove,
 }: LibraryViewProps) {
+  const [busy, setBusy] = useState<RowBusy | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** The install awaiting confirmation, or `null` when no dialog is open. */
+  const [pendingRemove, setPendingRemove] = useState<Install | null>(null)
+
   const catalogById = new Map(catalog.map((app) => [app.id, app]))
 
   /** The catalog entry for an install, when the server still lists it. */
   const entryFor = (install: Install) => catalogById.get(install.entry_id)
 
   const updates = installs.filter((install) => entryFor(install)?.update_available)
+
+  const launch = async (install: Install) => {
+    setBusy({ entryId: install.entry_id, action: "launch" })
+    setError(null)
+    setNotice(null)
+    try {
+      const result = await onLaunch(install.entry_id)
+      setNotice(`Started ${install.title} (pid ${result.pid}).`)
+    } catch (cause) {
+      setError(messageFor(cause, `Could not start ${install.title}.`))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const confirmRemove = async () => {
+    if (!pendingRemove) return
+    const target = pendingRemove
+    setBusy({ entryId: target.entry_id, action: "remove" })
+    setError(null)
+    setNotice(null)
+    try {
+      await onRemove(target.entry_id)
+      setPendingRemove(null)
+      setNotice(`Removed ${target.title} from this computer.`)
+    } catch (cause) {
+      setError(messageFor(cause, `Could not remove ${target.title}.`))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (installs.length === 0) {
     return (
@@ -51,6 +108,17 @@ export function LibraryView({
 
   return (
     <div className="flex flex-col gap-5">
+      {error && (
+        <p role="alert" className="text-xs text-error">
+          {error}
+        </p>
+      )}
+      {notice && !error && (
+        <p role="status" className="text-xs text-success">
+          {notice}
+        </p>
+      )}
+
       <div className="stats stats-horizontal w-full border border-base-300 bg-base-200">
         <div className="stat">
           <div className="stat-title text-xs">Installed</div>
@@ -128,14 +196,29 @@ export function LibraryView({
                         Local only
                       </span>
                     )}
-                    <button type="button" className="btn btn-sm btn-primary gap-2">
-                      <PlayIcon width={14} height={14} />
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary gap-2"
+                      onClick={() => void launch(install)}
+                      disabled={busy !== null}
+                    >
+                      {busy?.entryId === install.entry_id && busy.action === "launch" ? (
+                        <span className="loading loading-spinner loading-xs" />
+                      ) : (
+                        <PlayIcon width={14} height={14} />
+                      )}
                       Play
                     </button>
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm btn-square"
                       aria-label={`Remove ${install.title}`}
+                      onClick={() => {
+                        setError(null)
+                        setNotice(null)
+                        setPendingRemove(install)
+                      }}
+                      disabled={busy !== null}
                     >
                       <TrashIcon width={16} height={16} />
                     </button>
@@ -146,6 +229,20 @@ export function LibraryView({
           </ul>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title="Remove this application?"
+        message={
+          pendingRemove
+            ? `${pendingRemove.title} and its files will be deleted from this computer. You can install it again from the Store.`
+            : ""
+        }
+        confirmLabel="Remove"
+        busy={busy?.action === "remove"}
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   )
 }
