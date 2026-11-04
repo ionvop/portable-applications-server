@@ -16,8 +16,11 @@ interface NavBarProps {
   connection: ConnectionState
   serverUrl: string
   theme: ThemeId
+  /** The Store's search text — the navbar box edits the same query. */
+  query: string
   onNavigate: (view: ViewId) => void
   onToggleTheme: () => void
+  onQueryChange: (query: string) => void
 }
 
 const navItems: { id: ViewId; label: string; icon: typeof StoreIcon }[] = [
@@ -33,8 +36,10 @@ export function NavBar({
   connection,
   serverUrl,
   theme,
+  query,
   onNavigate,
   onToggleTheme,
+  onQueryChange,
 }: NavBarProps) {
   const status = describeConnection(connection)
 
@@ -81,7 +86,13 @@ export function NavBar({
         <div className="ml-auto flex items-center gap-2">
           <label className="input input-sm hidden w-56 lg:flex">
             <SearchIcon width={16} height={16} className="opacity-50" />
-            <input type="search" placeholder="Search apps…" aria-label="Search apps" />
+            <input
+              type="search"
+              placeholder="Search apps…"
+              aria-label="Search apps"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+            />
           </label>
 
           <div
