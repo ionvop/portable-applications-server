@@ -36,6 +36,17 @@ def launch(entry_id: int):
     return jsonify(launch_service.launch(entry_id))
 
 
+@bp.delete("")
+def reset():
+    """Delete every install, cached cover and partial download.
+
+    Backs the Settings screen's "Reset local storage" action. Refuses with
+    ``409`` while an install is running, because the worker is writing into the
+    directories this would delete.
+    """
+    return jsonify({"removed": install_service.reset_local_storage()})
+
+
 @bp.delete("/<int:entry_id>")
 def remove(entry_id: int):
     """Delete the install row and its directory."""
