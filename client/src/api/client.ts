@@ -149,6 +149,17 @@ export function removeApp(entryId: number): Promise<{ removed: number }> {
   return request(`/apps/${entryId}`, { method: "DELETE" })
 }
 
+/**
+ * `DELETE /api/apps`
+ *
+ * Removes every install, its directory, the cached covers and the transfer
+ * history. The backend answers `409` while an install is still running, so the
+ * caller should surface that message rather than retrying blindly.
+ */
+export function resetLocalStorage(): Promise<{ removed: number }> {
+  return request("/apps", { method: "DELETE" })
+}
+
 /** `GET /api/settings` */
 export function getSettings(): Promise<Settings> {
   return request("/settings")
