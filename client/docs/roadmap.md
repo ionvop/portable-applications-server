@@ -162,11 +162,42 @@ This is the step that makes the app feel real.
   `pid` returned and the process observed running, `DELETE` → row and directory both gone.
 - `npm run build` and `npm run lint` clean; `smoke_test.py` still passes in full.
 
-### Step 8 — Global error surface
+### Step 8 — Global error surface ✅
 - An `ApiError` banner/toast in `AppShell` so no request fails silently.
 - Decide on `Reset local storage`: either add `DELETE /api/apps` (remove all installs) or delete the button.
 
 **Done when:** stopping the server produces a readable message instead of a blank screen.
+
+**Completed.** Notes on how it landed:
+
+- New `src/components/ErrorBanner.tsx` renders a daisyUI `alert alert-error` directly under the
+  navbar, inside `AppShell`, so every screen inherits it. It is **dismissible and persistent**
+  rather than an auto-hiding toast: a message that disappears while the user is watching a
+  download is a message they miss. It carries an optional "Try again" that re-runs `load()`.
+- `App.tsx` gained one `actionError` state fed by a `messageFor` helper. Four paths that used to
+  swallow failures now report: the mount-time `getInstalled`/`getSettings`/`getJobs` reads (which
+  still degrade to empty, but no longer pretend the library is empty), `refreshAfterInstall`'s
+  `allSettled` rejections, the `getSystemInfo` refresh after a settings save, and the job poll.
+- **The job poll escalates instead of spamming.** A single failed tick is transient — the next
+  one retries in a second — so `pollFailures` counts consecutive misses and only the third
+  raises the banner. A successful poll resets the counter.
+- `DELETE /api/apps` is the bulk counterpart of `DELETE /api/apps/<id>`: it removes every install
+  row and directory, the cached covers under `data/thumbnails/`, leftover `data/tmp/*.zip` and
+  the `transfers` history (which would otherwise list installs whose files are gone). It keeps
+  `data/settings.json`, because wiping the server address would strand the client.
+- The reset **refuses with `409` while an install is running**. The worker is writing into
+  `data/apps` and `data/tmp`, so deleting those trees mid-transfer would fail the job with a
+  confusing error instead of a clear one. `job_service.has_active_jobs()` is the guard, imported
+  lazily inside `install_service.reset_local_storage()` because `job_service` already imports
+  `install_service`.
+- `SettingsView`'s permanently disabled "Unavailable in prototype" button is now a real action:
+  it opens the shared `ConfirmDialog`, shows a spinner while it runs, and reports the count
+  removed. It is disabled when `installed_count` is 0, and its outcome lines are separate from
+  the address field's so one cannot clear the other.
+- `smoke_test.py` gained a "reset local storage" section: reinstall → reset → `200` with
+  `removed == 1`, install row/directory/thumbnail cache/transfer history all gone, the server
+  address preserved, a second reset reporting `removed == 0`, and a `409` (with the install row
+  intact) when a reset is attempted while a worker is parked mid-download.
 
 ### Step 9 — Refresh behaviour
 - ~~Poll `/api/jobs` while Downloads is open; refetch the catalog when an install completes.~~
