@@ -20,6 +20,7 @@ import {
   installApp,
   launchApp,
   removeApp,
+  resetLocalStorage,
 } from "./api/client"
 import { hasActiveJobs, isActiveJob } from "./lib/jobs"
 import { AppShell } from "./components/layout/AppShell"
@@ -72,6 +73,12 @@ function App() {
   const [systemError, setSystemError] = useState<string | null>(null)
   /** The backend is up but the server catalog could not be fetched. */
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  /**
+   * The latest failure from a background request (a job poll, a post-install
+   * refresh, a local read). Rendered as a banner in the shell so a request can
+   * never fail silently, whatever screen the user happens to be on.
+   */
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Guards against a stale response overwriting a newer one (StrictMode mounts
   // the effect twice, and Retry can fire while a load is still in flight).
@@ -80,6 +87,10 @@ function App() {
   // Job ids that were running at the last poll. A job that disappears from this
   // set has finished, which is the cue to refresh the Library and the Store.
   const activeJobIds = useRef<Set<number>>(new Set())
+
+  // A single failed poll is transient (the next tick retries in one second), so
+  // it stays quiet. Only a run of failures means the backend is really gone.
+  const pollFailures = useRef(0)
 
   // daisyUI reads the theme from the document element, so mirror state there.
   useEffect(() => {
@@ -129,8 +140,17 @@ function App() {
 
     // Installs, settings and jobs are local, so a failure here is unexpected
     // but not fatal: degrade to empty rather than blanking the whole shell.
+    // The failure is still reported, because an empty Library that is really a
+    // failed read is exactly the kind of silent lie this step removes.
     setInstalls(installsResult.status === "fulfilled" ? installsResult.value : [])
     setSettings(settingsResult.status === "fulfilled" ? settingsResult.value : null)
+
+    const localFailure = [installsResult, settingsResult, jobsResult].find(
+      (result) => result.status === "rejected",
+    )
+    if (localFailure?.status === "rejected") {
+      setActionError(messageFor(localFailure.reason, "Could not read the local client state."))
+    }
 
     const initialJobs = jobsResult.status === "fulfilled" ? jobsResult.value : []
     activeJobIds.current = new Set(initialJobs.filter(isActiveJob).map((job) => job.id))
@@ -156,10 +176,18 @@ function App() {
       getInstalled(),
       getCatalog(),
     ])
-    if (installsResult.status === "fulfilled") setInstalls(installsResult.value)
+    if (installsResult.status === "fulfilled") {
+      setInstalls(installsResult.value)
+    } else {
+      setActionError(
+        messageFor(installsResult.reason, "Could not refresh the installed applications."),
+      )
+    }
     if (catalogResult.status === "fulfilled") {
       setCatalog(catalogResult.value)
       setCatalogError(null)
+    } else {
+      setActionError(messageFor(catalogResult.reason, "Could not refresh the catalog."))
     }
   }, [])
 
@@ -171,10 +199,16 @@ function App() {
     let next: Job[]
     try {
       next = await getJobs()
-    } catch {
-      // A failed poll is transient; the next tick tries again.
+    } catch (cause) {
+      // One failed poll is transient: the next tick retries in a second. A run
+      // of them means the backend is gone, which the user needs to know.
+      pollFailures.current += 1
+      if (pollFailures.current >= 3) {
+        setActionError(messageFor(cause, "Could not read the transfer progress."))
+      }
       return
     }
+    pollFailures.current = 0
 
     const current = new Set(next.filter(isActiveJob).map((job) => job.id))
     const finished = [...activeJobIds.current].filter((id) => !current.has(id))
@@ -200,6 +234,8 @@ function App() {
     setLoading(true)
     setSystemError(null)
     setCatalogError(null)
+    setActionError(null)
+    pollFailures.current = 0
     void load()
   }
 
@@ -229,9 +265,10 @@ function App() {
     setSettings(next)
     void getSystemInfo()
       .then(setSystem)
-      .catch(() => {
-        // The shell already renders from the previous system snapshot; a
-        // failed refresh here is not worth interrupting the user for.
+      .catch((cause: unknown) => {
+        // The shell keeps rendering from the previous snapshot, but the user
+        // should still learn that the refresh failed.
+        setActionError(messageFor(cause, "Could not refresh the client information."))
       })
 
     if (!next.server_url) {
@@ -284,6 +321,29 @@ function App() {
   const removeInstall = async (entryId: number): Promise<void> => {
     await removeApp(entryId)
     await refreshAfterInstall()
+  }
+
+  /**
+   * Delete every install, cached cover and transfer record, then re-read the
+   * shell state so the Library empties and the Store flips back to "Install".
+   *
+   * The backend refuses with `409` while an install is running; that message is
+   * rethrown so `SettingsView` can show it next to the button.
+   */
+  const resetStorage = async (): Promise<{ removed: number }> => {
+    const result = await resetLocalStorage()
+    await refreshAfterInstall()
+    void getSystemInfo()
+      .then(setSystem)
+      .catch((cause: unknown) => {
+        setActionError(messageFor(cause, "Could not refresh the client information."))
+      })
+    void getJobs()
+      .then(setJobs)
+      .catch((cause: unknown) => {
+        setActionError(messageFor(cause, "Could not refresh the transfer history."))
+      })
+    return result
   }
 
   const navigate = (next: ViewId) => {
@@ -353,6 +413,9 @@ function App() {
       serverUrl={system.server_url}
       version={system.version}
       theme={theme}
+      error={actionError}
+      onDismissError={() => setActionError(null)}
+      onRetryError={retry}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
     >
@@ -413,6 +476,7 @@ function App() {
           theme={theme}
           onToggleTheme={toggleTheme}
           onSettingsSaved={handleSettingsChanged}
+          onResetStorage={resetStorage}
         />
       )}
     </AppShell>
