@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import type { ConnectionState, ThemeId, ViewId } from "../../types"
 import { describeConnection } from "../../lib/connection"
+import { ErrorBanner } from "../ErrorBanner"
 import { NavBar } from "./NavBar"
 
 interface AppShellProps {
@@ -9,14 +10,18 @@ interface AppShellProps {
   serverUrl: string
   version: string
   theme: ThemeId
+  /** Latest shell-level failure, or `null` when there is nothing to report. */
+  error?: string | null
+  onDismissError?: () => void
+  onRetryError?: () => void
   onNavigate: (view: ViewId) => void
   onToggleTheme: () => void
   children: ReactNode
 }
 
 /**
- * Full-height application frame: a fixed top navbar, a scrollable content
- * region, and a thin status footer.
+ * Full-height application frame: a fixed top navbar, an optional error banner,
+ * a scrollable content region, and a thin status footer.
  */
 export function AppShell({
   activeView,
@@ -24,6 +29,9 @@ export function AppShell({
   serverUrl,
   version,
   theme,
+  error = null,
+  onDismissError,
+  onRetryError,
   onNavigate,
   onToggleTheme,
   children,
@@ -40,6 +48,10 @@ export function AppShell({
         onNavigate={onNavigate}
         onToggleTheme={onToggleTheme}
       />
+
+      {error && onDismissError && (
+        <ErrorBanner message={error} onDismiss={onDismissError} onRetry={onRetryError} />
+      )}
 
       <main className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-7xl p-6">{children}</div>
