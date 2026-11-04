@@ -130,13 +130,37 @@ This is the step that makes the app feel real.
   byte counts, duplicate-install reuse, partial progress observed mid-download, a failed job
   carrying the server's message, and stale-row reconciliation.
 
-### Step 7 — Wire the write actions
+### Step 7 — Wire the write actions ✅
 - `AppDetailView`: primary button → install (or launch when current); `Verify files` → `POST install {"force": true}`; show the job's progress inline. Replace the client-side `data\apps\<slug>` guess with the install row's real `directory`.
 - `LibraryView`: `Play` → `POST /api/apps/<id>/launch`; trash → confirm + `DELETE`.
 - ~~`DownloadsView`: real active jobs + persisted history.~~ **Done in Step 6** — the screen
   renders live progress and history; Step 7 only needs to add per-job actions if wanted.
 
 **Done when:** install → launch → remove round-trips through the UI.
+
+**Completed.** Notes on how it landed:
+
+- `App.tsx` owns the three write paths (`startInstall`, `startLaunch`, `removeInstall`) and the
+  views own only transient `busy`/`error`/`notice` state — the same split `SettingsView` uses.
+  Handlers rethrow, so `ApiError.message` reaches the screen verbatim.
+- **`startInstall` registers the returned job locally.** The poll loop only runs while `jobs`
+  holds an active job, so without this an install started from the detail screen would never
+  show progress and its completion would never trigger the Library/Store refresh. If the job
+  comes back already terminal (tiny app, or the entry was current) it calls `refreshAfterInstall`
+  directly, because no poll will ever observe that transition.
+- `selectedApp` is a snapshot taken on click, so it went stale the moment an install finished.
+  `App.tsx` now derives `detailApp` from the freshly fetched catalog (falling back to the
+  snapshot when the entry is no longer listed), which is what flips the button to `Play`.
+- `AppDetailView` renders `install.directory` and `install.executable` from the install row
+  instead of the old placeholder strings, and shows the running job's progress inline via the
+  new shared `JobProgress` component (also used by `DownloadsView`, so the `~` estimate prefix
+  and 100% clamp live in one place).
+- Removal confirmation is a native `<dialog class="modal">` in a new `ConfirmDialog` component:
+  `window.confirm` is unreliable inside pywebview's WebView2 renderer, and the native dialog
+  gives focus trapping, the backdrop and Escape for free.
+- Verified live against the real server: install → `completed` with the row written, launch →
+  `pid` returned and the process observed running, `DELETE` → row and directory both gone.
+- `npm run build` and `npm run lint` clean; `smoke_test.py` still passes in full.
 
 ### Step 8 — Global error surface
 - An `ApiError` banner/toast in `AppShell` so no request fails silently.
