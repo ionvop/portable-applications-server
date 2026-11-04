@@ -96,6 +96,7 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 | POST | `/api/apps/<id>/install` | Start a background install job (`202`; `{"force": true}` to re-download) |
 | POST | `/api/apps/<id>/launch` | Start the installed application |
 | DELETE | `/api/apps/<id>` | Remove the install row and its directory |
+| DELETE | `/api/apps` | Reset local storage: every install, cached cover and transfer row (`409` while an install runs) |
 | GET | `/api/jobs` | Active install jobs first, then finished history |
 | GET | `/api/jobs/<id>` | One job, live or historical |
 | GET | `/api/settings` | Stored settings |
