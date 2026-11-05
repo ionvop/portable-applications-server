@@ -17,8 +17,10 @@ from ..services import server_client, state_service
 bp = Blueprint("catalog", __name__, url_prefix="/api/catalog")
 
 #: Fields the catalog listing exposes. ``executable`` is deliberately absent:
-#: it is only disclosed per entry by the manifest endpoint.
-PUBLIC_FIELDS = ("id", "title", "description", "thumbnail")
+#: it is only disclosed per entry by the manifest endpoint. ``version`` is the
+#: server's published version, which the UI shows next to the installed one so
+#: an update is legible without opening the detail view.
+PUBLIC_FIELDS = ("id", "title", "description", "thumbnail", "version")
 
 
 @bp.get("")
