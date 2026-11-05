@@ -55,7 +55,9 @@ curl http://localhost:5173/api/health   # {"status":"ok"}
 
 `backend/dev_server.py` skips the PyWebView window and the `dist/` existence check, so no
 build is needed while iterating. Run `python backend/smoke_test.py` to check the API
-baseline without starting a server.
+baseline without starting a server, or `python -m pytest` (from the repo root) to run the
+same suite through pytest — `tests/conftest.py` redirects it at a temporary data folder so
+the real `data/` catalog is never touched.
 
 ## Data layout
 
@@ -68,6 +70,10 @@ data/
 ├── thumbnails/     uploaded cover images
 └── tmp/            temporary ZIP archives (swept on startup)
 ```
+
+Set `PAS_DATA_DIR` to an absolute path to use a different data folder — for example
+`$env:PAS_DATA_DIR = 'D:\library'` before `run.py`. The test suite uses the same override
+for isolation, so the layout above is unchanged when it is unset.
 
 Because all paths are relative, the whole `server/` folder can be moved, copied or backed up
 without reconfiguration.
