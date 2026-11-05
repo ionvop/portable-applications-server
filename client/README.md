@@ -61,7 +61,8 @@ npm run build
 The smoke test starts a stub Portable Applications Server on loopback, so the full
 catalog → download → extract → launch path is exercised without a real server. It covers
 every endpoint, including the failure paths (dead server, missing manifest, non-image
-thumbnail, missing executable, refused reset).
+thumbnail, missing executable, refused reset), a chunked download with no `Content-Length`,
+and a version bump that must trigger a re-download.
 
 `pytest` runs the same checks through a thin wrapper that redirects `data/` to a temporary
 directory, so it never touches your real installs, cached covers or server address. Install
@@ -70,6 +71,20 @@ the test runner once with:
 ```powershell
 pip install -r backend/requirements-dev.txt
 ```
+
+### Cross-repo integration test
+
+`backend/tests/test_integration.py` runs the client against the **real** server instead of the
+stub. It is skipped unless `PAS_SERVER_DIR` points at the server checkout:
+
+```powershell
+$env:PAS_SERVER_DIR = "..\server"
+python -m pytest backend/tests/test_integration.py -v
+```
+
+It starts the server in a subprocess, publishes a fixture application, and drives the client
+through install → launch → version bump → re-install. This is the automated form of the
+"fresh client machine" check below.
 
 ## Desktop build
 
@@ -142,7 +157,8 @@ The client is feature-complete for its intended use: browse the server catalog, 
 background with live progress, launch, and remove — all from one window.
 
 - **Store** — the server catalog with cover art, search, and `All` / `Installed` / `Updates`
-  filters. Covers are proxied and cached by the backend, so the UI never needs CORS.
+  filters. Covers are proxied and cached by the backend, so the UI never needs CORS. Each row
+  shows the published version next to the installed one, so an update reads `v1.0.0 → v2.0.0`.
 - **Library** — what is actually installed on this machine, read from `client.db` rather than
   filtered from the catalog, so an entry deleted server-side still shows up.
 - **Downloads** — active install jobs with a progress bar, plus history that survives a
@@ -155,4 +171,12 @@ background with live progress, launch, and remove — all from one window.
 See [`docs/roadmap.md`](docs/roadmap.md) for the step-by-step history and
 [`backend/README.md`](backend/README.md) for the API reference and data layout. All eleven
 roadmap steps are complete, including packaging verification.
+
+### Trust model
+
+The client sends no credentials, and the server's client-facing endpoints are intentionally
+open to the LAN. Admin endpoints on the server are loopback-guarded, the client's own Flask app
+binds `127.0.0.1` only, and every server call is proxied through the client backend so no CORS
+is involved. A shared secret is the documented upgrade path if the network is not trusted; see
+[`backend/README.md`](backend/README.md#trust-model).
 
