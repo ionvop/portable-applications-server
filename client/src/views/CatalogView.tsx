@@ -126,14 +126,22 @@ export function CatalogView({ apps, query, onQueryChange, onOpenApp }: CatalogVi
                     <h3 className="card-title text-sm">{app.title}</h3>
                     {app.installed_version && (
                       <span className="badge badge-sm font-mono whitespace-nowrap">
-                        v{app.installed_version}
+                        {app.update_available
+                          ? `v${app.installed_version} → v${app.version}`
+                          : `v${app.installed_version}`}
                       </span>
                     )}
                   </div>
                   <p className="line-clamp-2 text-xs text-base-content/60">{app.description}</p>
                   <div className="mt-1 flex items-center justify-between gap-2 text-xs text-base-content/40">
                     <span className="font-mono">
-                      {app.installed ? `v${app.installed_version}` : "Not downloaded"}
+                      {app.installed
+                        ? app.update_available
+                          ? `v${app.installed_version} → v${app.version}`
+                          : `v${app.installed_version}`
+                        : app.version
+                          ? `v${app.version}`
+                          : "Not downloaded"}
                     </span>
                     {app.installed ? (
                       <span className="badge badge-success badge-sm gap-1">
@@ -159,6 +167,7 @@ export function CatalogView({ apps, query, onQueryChange, onOpenApp }: CatalogVi
               <tr>
                 <th>Title</th>
                 <th>Installed version</th>
+                <th>Available</th>
                 <th className="text-right">Status</th>
               </tr>
             </thead>
@@ -178,6 +187,11 @@ export function CatalogView({ apps, query, onQueryChange, onOpenApp }: CatalogVi
                   <td>
                     <span className="badge badge-ghost badge-sm font-mono">
                       {app.installed_version || "—"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="badge badge-ghost badge-sm font-mono">
+                      {app.version || "—"}
                     </span>
                   </td>
                   <td className="text-right">
