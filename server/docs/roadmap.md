@@ -1,11 +1,12 @@
 ## Current state (verified)
 
-**Steps 1–9 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (96 checks). `build.bat` produces a portable onedir bundle in `release/`.
+**Steps 1–10 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (131 checks), runs under `pytest` against an isolated data folder, and CI (`.github/workflows/tests.yml`) runs it on every push. Failed requests surface through a global error toast. `build.bat` produces a portable onedir bundle in `release/`.
 
 **LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
 **Remaining functional gaps:**
 1. The client application does not exist; `/client` is a stopgap (Step 11).
+2. No request timeout and no React error boundary — see Step 10's notes.
 
 ---
 
@@ -139,6 +140,20 @@ Each step is independently shippable and verifiable. Don't start the next until 
 - Consider a shared-secret header for `/api/catalog` writes if clients share the network.
 
 **Done when:** the smoke test covers every endpoint and the UI never fails silently.
+
+**Implemented:**
+- `backend/paths.py` gained a `PAS_DATA_DIR` override. `data_dir()` returns the env var when set, otherwise `base_dir()/data`; every other helper (`apps_dir`, `thumbnails_dir`, `tmp_dir`, `db_path`) already derives from it, and `web_dir()` stays on `resource_root()` so the built frontend is still found.
+- `tests/conftest.py` sets `PAS_DATA_DIR` to a session `tmp_path` folder, so a pytest run never writes into the real `data/` catalog, apps or thumbnails.
+- New `tests/test_smoke.py` is a thin wrapper: it skips with an actionable message when `dist/index.html` is missing, otherwise asserts `smoke_test.main() == 0` and lists the failed check labels in the assertion message. `backend/smoke_test.py` remains the single source of truth and is still runnable standalone.
+- `smoke_test.py` hardening: `main()` clears the module-level `failures` list so repeat runs start clean; the fake `check("delete returns 204", True)` now asserts the real status; added PUT/DELETE on an unknown id (404 + error body), malformed JSON body rejection (400), and unknown-thumbnail 404 checks.
+- `pytest.ini` (`testpaths = tests`, `pythonpath = .`), `backend/requirements-dev.txt` (`pytest`), and `npm test` → `python -m pytest`.
+- New `.github/workflows/tests.yml` runs on push/PR: Python 3.12 + Node 20, installs only `flask` + `pytest` (pywebview/pyinstaller need a desktop), `npm ci`, `npm run build`, `python -m pytest`, `npm run lint`.
+- Global error toast: `src/api/client.ts` now owns an `onApiError` listener registry and emits from `request()`, so no call site can swallow a failure. Transport failures (server stopped, offline) are wrapped as `ApiError` with status `0` instead of leaking a raw `TypeError`, and a 2xx body that is not JSON becomes an `ApiError` instead of a `SyntaxError`. Polled endpoints (`listTransfers`, `listActivity`) opt out with `silent: true` so a transient 2 s blip cannot stack notifications.
+- New `src/components/Toaster.tsx` subscribes to that registry and renders a daisyUI `toast toast-end toast-bottom` stack of `alert alert-error` cards: identical messages within 4 s merge into a counter, entries auto-dismiss after 6 s, and each has a manual dismiss button. Mounted once in `AppShell`, so it covers every view.
+- `App.tsx`: the initial `load()` still shows the Retry banner (its requests are `silent` so the failure is reported once), while background refreshes no longer set the sticky banner — `refreshSystemInfo`/`refreshEntries` let the toast report them instead of swallowing the catch. `navigate()` clears the banner so a stale error does not follow the user.
+- `DashboardView`'s clipboard copy now reports a denied write through the same toast channel via `reportError()` instead of failing silently.
+- **Not done, deliberately:** no shared-secret header. The Step 5 loopback guard already keeps `/api/catalog`, `/api/files`, `/api/system`, `/api/transfers` and `/api/activity` unreachable from other machines, so a token would add ceremony without a threat to stop today. It becomes meaningful once the client app (Step 11) needs to authenticate, and the trust model is decided there alongside CORS. Recorded in Step 11's checklist.
+- Scope left open: no React error boundary or `unhandledrejection` bridge (a render-time throw can still blank the page) and no request timeout; both are worth their own step.
 
 ### Step 11 — Client application (deferred)
 
