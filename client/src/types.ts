@@ -17,14 +17,17 @@ export type ConnectionState = "connected" | "unreachable" | "unconfigured"
  * A catalog row as delivered by `GET /api/catalog`.
  *
  * The listing exposes only public display fields plus this machine's install
- * state. Manifest fields (`version`, `executable`, `size_bytes`) are disclosed
- * per entry by `GET /api/catalog/<id>` — see {@link CatalogDetail}.
+ * state. Manifest fields (`executable`, `size_bytes`) are disclosed per entry
+ * by `GET /api/catalog/<id>` — see {@link CatalogDetail}. `version` is the
+ * server's published version, shown next to `installed_version` so an update
+ * is legible without opening the detail view.
  */
 export interface CatalogApp {
   id: number
   title: string
   description: string
   thumbnail: string
+  version: string
   installed: boolean
   installed_version: string
   update_available: boolean
