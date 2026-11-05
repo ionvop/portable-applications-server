@@ -1,12 +1,12 @@
 ## Current state (verified)
 
-**Steps 1–10 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (131 checks), runs under `pytest` against an isolated data folder, and CI (`.github/workflows/tests.yml`) runs it on every push. Failed requests surface through a global error toast. `build.bat` produces a portable onedir bundle in `release/`.
+**Steps 1–11 are complete.** The backend implements real CRUD, path-traversal guards, thumbnail upload, streaming ZIP distribution, a SPA fallback, a client-facing catalog, a real transfer history with live byte progress, and filesystem-backed folder actions and storage reporting. The frontend is fully wired to the API: `App.tsx` fetches `systemInfo`, `catalogEntries`, `transfers` and `activity`, `EntryDetailView` round-trips create/update/delete, `FilesView` browses the real apps folder and can reveal it in Explorer, rescan it, and show real disk usage, and `Thumbnail` renders uploaded covers. `smoke_test.py` covers every endpoint (131 checks), runs under `pytest` against an isolated data folder, and CI (`.github/workflows/tests.yml`) runs it on every push. Failed requests surface through a global error toast. `build.bat` produces a portable onedir bundle in `release/`.
 
-**LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
+**LAN distribution works.** The WSGI server binds `0.0.0.0` while PyWebView loads `127.0.0.1`; `GET /api/client/catalog` exposes only `id, title, description, thumbnail, version`; `GET /client` serves a browser-usable catalog page; admin endpoints are loopback-only.
 
-**Remaining functional gaps:**
-1. The client application does not exist; `/client` is a stopgap (Step 11).
-2. No request timeout and no React error boundary — see Step 10's notes.
+**The client application exists** at `../client/` (Step 11). It is a separate Flask + React + PyWebView + PyInstaller app that discovers the server on the LAN, lists the catalog, downloads and extracts archives, records installs, launches applications detached, and re-downloads when the published `version` changes. A cross-repo integration test drives the client's real services against a real server subprocess.
+
+**Remaining functional gaps:** none blocking. The trust model is deliberately LAN-only (see Step 11), and the client has no React error boundary or request timeout — both are worth their own step.
 
 ---
 
@@ -61,7 +61,7 @@ Each step is independently shippable and verifiable. Don't start the next until 
 - Added a loopback-only guard on `/api/catalog`, `/api/files`, `/api/system` so `0.0.0.0` does not expose admin writes to the LAN. Thumbnail reads and `/api/client/*` stay open.
 - `smoke_test.py` covers the client endpoints, the `/client` page, and the guard (50 checks green).
 
-> **Note:** the `/client` page is a deliberate stopgap. It proves the LAN path works and gives clients something usable today, but it is not the client application. The real client app is deferred to Step 11 — the server is being finished first.
+> **Note:** the `/client` page is a deliberate stopgap. It proves the LAN path works and gives clients something usable today, but it is not the client application. The real client app landed in Step 11 (`../client/`).
 
 ### Step 6 — Make Transfers and Activity real ✅
 - Add a `transfers` table (`id, entry_id, client_ip, size_bytes, status, started_at, finished_at`) and an `activity` table, or derive activity from transfers.
@@ -152,10 +152,10 @@ Each step is independently shippable and verifiable. Don't start the next until 
 - New `src/components/Toaster.tsx` subscribes to that registry and renders a daisyUI `toast toast-end toast-bottom` stack of `alert alert-error` cards: identical messages within 4 s merge into a counter, entries auto-dismiss after 6 s, and each has a manual dismiss button. Mounted once in `AppShell`, so it covers every view.
 - `App.tsx`: the initial `load()` still shows the Retry banner (its requests are `silent` so the failure is reported once), while background refreshes no longer set the sticky banner — `refreshSystemInfo`/`refreshEntries` let the toast report them instead of swallowing the catch. `navigate()` clears the banner so a stale error does not follow the user.
 - `DashboardView`'s clipboard copy now reports a denied write through the same toast channel via `reportError()` instead of failing silently.
-- **Not done, deliberately:** no shared-secret header. The Step 5 loopback guard already keeps `/api/catalog`, `/api/files`, `/api/system`, `/api/transfers` and `/api/activity` unreachable from other machines, so a token would add ceremony without a threat to stop today. It becomes meaningful once the client app (Step 11) needs to authenticate, and the trust model is decided there alongside CORS. Recorded in Step 11's checklist.
+- **Not done, deliberately:** no shared-secret header. The Step 5 loopback guard already keeps `/api/catalog`, `/api/files`, `/api/system`, `/api/transfers` and `/api/activity` unreachable from other machines, so a token would add ceremony without a threat to stop today. Step 11 confirmed the decision: the client-facing endpoints stay LAN-open by design, and the shared secret is documented as the upgrade path rather than built.
 - Scope left open: no React error boundary or `unhandledrejection` bridge (a render-time throw can still blank the page) and no request timeout; both are worth their own step.
 
-### Step 11 — Client application (deferred)
+### Step 11 — Client application ✅
 
 The server is finished first. Until this step lands, client computers use the
 server-rendered `/client` page from Step 5, which can list the catalog and
@@ -170,10 +170,21 @@ download ZIPs but cannot install or launch anything.
 
 **Done when:** a fresh client machine can install, launch, and update an application entirely from the server.
 
+**Implemented** — the client lives at `../client/` as a separate application (Flask on 8757 + React + PyWebView + PyInstaller onedir), not a second frontend in this repo.
+
+- **Catalog and install.** `server_client.get_catalog()` reads `GET /api/client/catalog`; `install_service.ensure_installed()` fetches the manifest, streams the ZIP into `data/tmp`, extracts it into `data/apps/<slug>` through a staged `.extracting` directory with a zip-slip guard, and records the install row in `client.db`. Installs run on a worker thread (`job_service`) and return `202`, so a multi-gigabyte game never blocks the request.
+- **Launch.** `launch_service.launch()` resolves the manifest's relative `executable` inside the install directory (rejecting absolute paths, drive letters and `..`) and spawns it detached, so closing the client window does not kill the game.
+- **Executable disclosure.** The roadmap suggested a `GET /api/client/catalog/<id>/launch` endpoint. The manifest endpoint (`GET /api/client/catalog/<id>/manifest`) already discloses `executable` for exactly one entry at install time, which is the same disclosure with one fewer round trip — and it keeps launching local, so the client never asks the server to start a process. The catalog listing still omits `executable` entirely.
+- **Update check.** Version-only, by decision: `api/catalog.py` sets `update_available` by comparing the published `version` with the installed one, and `install_service._is_current()` skips the download when they match. No content hash and no `updated_at` exposure — the server README documents that `version` is a change marker the administrator must bump. The client's "Verify files" action forces a re-download for repairs.
+- **Trust model: LAN-only binding, documented.** `/api/client/*` and `/api/distribution/*` stay unauthenticated and LAN-reachable by design; the Step 5 loopback guard keeps every admin endpoint off the network. A shared secret is recorded as the upgrade path in `backend/README.md` ("Trust model") but is deliberately not implemented, because the only open endpoints are read-only catalog and download.
+- **No CORS.** The client backend proxies every server call through `urllib`, so the browser only ever talks to its own origin. The server sends no `Access-Control-Allow-*` headers and needs none.
+- **Verification.** `client/backend/smoke_test.py` grew two sections that were previously untested: a chunked download with **no `Content-Length`** (the real server's behaviour, which the stub had been hiding) and a **version bump** that must trigger a re-download without `force`. New `client/backend/tests/test_integration.py` starts the real server package in a subprocess, publishes a fixture application through the admin API, and drives the client's real services through catalog → manifest → download → extract → install → launch → version bump → re-install. It is skipped unless `PAS_SERVER_DIR` points at this checkout.
+- **Client listing.** `GET /api/catalog` on the client now carries the published `version` alongside `installed_version`, so the Store can render `v1.0.0 → v2.0.0` without opening the detail view.
+
 ---
 
 ## Suggested order of attack
 
-If you want the shortest path to "feels like a real app": **Steps 1 → 2 → 3 → 4**. That alone turns the prototype into a working catalog manager. **Step 5** is the one-line-ish fix that makes the core promise (LAN distribution) actually true. Steps 6–8 add the observability the UI already pretends to have. Steps 9–10 are release work. **Step 11** is the separate client application, deliberately last so the server contract is stable before a second codebase depends on it.
+If you want the shortest path to "feels like a real app": **Steps 1 → 2 → 3 → 4**. That alone turns the prototype into a working catalog manager. **Step 5** is the one-line-ish fix that makes the core promise (LAN distribution) actually true. Steps 6–8 add the observability the UI already pretends to have. Steps 9–10 are release work. **Step 11** is the separate client application, deliberately last so the server contract was stable before a second codebase depended on it.
 
 One caution: don't wire `TransfersView`'s progress bars before Step 7 — you'll build a fake progress model you then have to throw away. Step 6 therefore ships indeterminate bars; Step 7 replaces them with real byte counts.
