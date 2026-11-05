@@ -69,6 +69,22 @@ stub server on loopback that implements the contract below.
 with `pip install -r backend/requirements-dev.txt`; the runtime set in `requirements.txt`
 stays free of test dependencies, and `pyinstaller.spec` excludes `pytest` from the bundle.
 
+### Cross-repo integration test
+
+`backend/tests/test_integration.py` proves the client works against a **real** server rather
+than the stub. It starts the server package in a subprocess on an ephemeral port, publishes a
+fixture application through the server's admin API, and drives the client's real services
+through catalog → manifest → download → extract → install → launch → version bump →
+re-install. It is skipped unless `PAS_SERVER_DIR` points at the server checkout:
+
+```powershell
+$env:PAS_SERVER_DIR = "..\server"
+python -m pytest backend/tests/test_integration.py -v
+```
+
+The subprocess is used deliberately: both repositories have a `backend` package, so importing
+the server in-process would collide in `sys.modules`.
+
 ## Data layout
 
 Everything writable lives in `data/` beside the executable (or beside `run.py` in
@@ -199,6 +215,28 @@ manually with `PUT /api/settings`.
 treats `version` as a free-form change marker compared verbatim, so an installation is only
 refreshed after the administrator bumps it. A blank catalog version would disable update
 detection entirely, so the server always publishes one (default `1.0.0`).
+
+The client's own `GET /api/catalog` also carries the published `version` next to
+`installed_version`, so the Store can render `v1.0.0 → v2.0.0` without opening the detail view.
+There is no content hash and no `updated_at` comparison: replacing an application's files
+without bumping `version` will not reach installed clients, which is why "Verify files" exists
+as a forced re-download.
+
+### Trust model
+
+The client-facing endpoints on the server are **intentionally unauthenticated**, and the client
+sends no credentials:
+
+- `/api/client/*` and `/api/distribution/*` are open to the LAN by design — that is the product.
+- The server's admin endpoints are loopback-guarded, so `BIND_HOST = "0.0.0.0"` never exposes
+  writes, filesystem browsing or transfer history.
+- The client's own Flask app binds `127.0.0.1` only, so nothing about the client is exposed.
+- **No CORS is needed.** Every server call goes through `server_client` (`urllib`) on the client
+  backend, so the browser only ever talks to its own origin. The server sends no
+  `Access-Control-Allow-*` headers.
+
+A shared secret (`X-PAS-Token`) is the documented upgrade path if the network is not trusted;
+it is not implemented. See `../server/backend/README.md` ("Trust model") for the full rationale.
 
 **Thumbnails:** the catalog's `thumbnail` is a bare filename. The server serves it from
 `GET /api/files/thumbnail/<name>`, which is reachable from the LAN, but it sends no CORS
