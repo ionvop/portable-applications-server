@@ -75,6 +75,17 @@ ENTRY_VERSION = "1.0.0"
 ENTRY_EXECUTABLE = "bin/game.exe"
 THUMBNAIL_NAME = "cover.png"
 
+#: Mutable stub behaviour, so a test can exercise a path the default stub does
+#: not. The real server streams chunked and never sends ``Content-Length``, so
+#: ``stream_without_length`` reproduces that; ``manifest_size`` lets a test make
+#: the manifest's uncompressed size differ from the compressed archive, which is
+#: what the client falls back to when no length is available.
+STUB = {
+    "version": ENTRY_VERSION,
+    "stream_without_length": False,
+    "manifest_size": None,
+}
+
 #: A 1x1 transparent PNG. Enough to prove the proxy round-trips bytes and
 #: preserves the content type.
 THUMBNAIL_BYTES = base64.b64decode(
@@ -111,6 +122,7 @@ class StubHandler(BaseHTTPRequestHandler):
                         "title": ENTRY_TITLE,
                         "description": "Test entry",
                         "thumbnail": THUMBNAIL_NAME,
+                        "version": STUB["version"],
                     }
                 ]
             )
@@ -119,12 +131,30 @@ class StubHandler(BaseHTTPRequestHandler):
                 {
                     "id": ENTRY_ID,
                     "title": ENTRY_TITLE,
-                    "version": ENTRY_VERSION,
+                    "version": STUB["version"],
                     "executable": ENTRY_EXECUTABLE,
-                    "size_bytes": len(ARCHIVE),
+                    "size_bytes": (
+                        STUB["manifest_size"]
+                        if STUB["manifest_size"] is not None
+                        else len(ARCHIVE)
+                    ),
                 }
             )
         elif self.path == f"/api/distribution/{ENTRY_ID}/download":
+            if STUB["stream_without_length"]:
+                # Mirror the real server: chunked, no ``Content-Length``. The
+                # client must fall back to the manifest size for progress.
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                for offset in range(0, len(ARCHIVE), 64):
+                    chunk = ARCHIVE[offset : offset + 64]
+                    self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii"))
+                    self.wfile.write(chunk)
+                    self.wfile.write(b"\r\n")
+                self.wfile.write(b"0\r\n\r\n")
+                return
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
             self.send_header("Content-Length", str(len(ARCHIVE)))
@@ -600,6 +630,113 @@ def main() -> int:
         finally:
             release.set()
             server_client.download_archive = original_download
+
+        print("chunked download")
+        # The real server streams the archive chunked and sends no
+        # ``Content-Length``, so the client must fall back to the manifest's
+        # uncompressed size for progress. The default stub always sends a
+        # length, which would hide a regression in that fallback.
+        STUB["stream_without_length"] = True
+        STUB["manifest_size"] = len(ARCHIVE) * 4
+        try:
+            response = client.post(f"/api/apps/{ENTRY_ID}/install", json={"force": True})
+            check("chunked install returns 202", response.status_code == 202, response.status_code)
+            chunked = wait_for_job(client, response.get_json()["id"])
+            check("chunked install completes", chunked["status"] == "completed", chunked)
+            check(
+                "chunked install transfers every byte",
+                chunked["received_bytes"] == len(ARCHIVE),
+                chunked,
+            )
+            # A completed job rewrites ``total_bytes`` to the real byte count,
+            # so history reads 100% rather than stalling at the compression
+            # ratio. The fallback only has to keep the bar moving while it runs.
+            check(
+                "chunked install reports a final total",
+                chunked["total_bytes"] == len(ARCHIVE),
+                chunked,
+            )
+            check(
+                "chunked install still extracts",
+                (app_dir / ENTRY_EXECUTABLE).is_file(),
+                app_dir,
+            )
+        finally:
+            STUB["stream_without_length"] = False
+            STUB["manifest_size"] = None
+
+        print("update")
+        # The whole point of the version field: bumping it on the server must
+        # make an installed copy stale, and a plain install (no ``force``) must
+        # then re-download. Nothing else in this suite exercises that path.
+        response = client.get("/api/catalog")
+        check(
+            "current install reports no update",
+            response.get_json()[0]["update_available"] is False,
+            response.get_json(),
+        )
+
+        STUB["version"] = "2.0.0"
+        try:
+            response = client.get("/api/catalog")
+            listed = response.get_json()[0]
+            check(
+                "version bump reports an update",
+                listed["update_available"] is True,
+                listed,
+            )
+            check(
+                "listing carries the published version",
+                listed.get("version") == "2.0.0",
+                listed,
+            )
+            check(
+                "listing keeps the installed version",
+                listed["installed_version"] == ENTRY_VERSION,
+                listed,
+            )
+
+            downloads: list[int] = []
+
+            def counting_update_download(*args, **kwargs):
+                downloads.append(1)
+                return original_download(*args, **kwargs)
+
+            server_client.download_archive = counting_update_download
+            try:
+                response = client.post(f"/api/apps/{ENTRY_ID}/install")
+                check("update install returns 202", response.status_code == 202, response.status_code)
+                updated = wait_for_job(client, response.get_json()["id"])
+            finally:
+                server_client.download_archive = original_download
+
+            check("update install completes", updated["status"] == "completed", updated)
+            check("update install re-downloads", downloads == [1], downloads)
+
+            install = state_service.get_install(ENTRY_ID)
+            check(
+                "update records the new version",
+                install is not None and install.version == "2.0.0",
+                install,
+            )
+
+            response = client.get("/api/catalog")
+            check(
+                "updated install reports no update",
+                response.get_json()[0]["update_available"] is False,
+                response.get_json(),
+            )
+        finally:
+            STUB["version"] = ENTRY_VERSION
+            # Put the install row back to the version the rest of the suite
+            # asserts against, so a later section cannot inherit "2.0.0".
+            state_service.record_install(
+                entry_id=ENTRY_ID,
+                title=ENTRY_TITLE,
+                directory=install_service.slugify(ENTRY_TITLE),
+                executable=ENTRY_EXECUTABLE,
+                version=ENTRY_VERSION,
+            )
 
         print("job failures")
         # A manifest 404 must surface as a failed job, not a hung one.
