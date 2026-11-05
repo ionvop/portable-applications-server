@@ -11,10 +11,16 @@ backed up without reconfiguration.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from . import config
+
+#: Environment variable that relocates the writable data folder. Tests point it
+#: at a temporary directory so a run never touches the real ``data`` catalog,
+#: and it doubles as an escape hatch for running against an alternate library.
+DATA_DIR_ENV = "PAS_DATA_DIR"
 
 
 def is_frozen() -> bool:
@@ -42,6 +48,10 @@ def resource_root() -> Path:
 
 
 def data_dir() -> Path:
+    """Writable data folder: ``PAS_DATA_DIR`` when set, else beside the app."""
+    override = os.environ.get(DATA_DIR_ENV, "").strip()
+    if override:
+        return _ensure(Path(override).expanduser().resolve())
     return _ensure(base_dir() / config.DATA_DIR_NAME)
 
 
