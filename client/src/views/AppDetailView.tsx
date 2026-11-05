@@ -212,6 +212,10 @@ export function AppDetailView({
                   <dd className="font-mono">{app.installed_version || "—"}</dd>
                 </div>
                 <div className="flex items-center justify-between gap-3">
+                  <dt className="text-base-content/60">Available version</dt>
+                  <dd className="font-mono">{app.version || "—"}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
                   <dt className="text-base-content/60">Status</dt>
                   <dd className="font-mono">
                     {app.update_available
