@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { reportError } from "../api/client"
 import type { ActivityItem, CatalogEntry, SystemInfo, Transfer } from "../types"
 import { Thumbnail } from "../components/Thumbnail"
 import { formatBytes, formatPercent, formatRelativeTime } from "../lib/format"
@@ -70,8 +71,10 @@ export function DashboardView({
       await navigator.clipboard.writeText(system.client_url)
       setCopied(true)
     } catch {
-      // Clipboard access can be denied; the input is selectable as a fallback.
+      // Clipboard access can be denied; report it instead of failing silently
+      // and leave the selectable input visible as the fallback.
       setCopied(false)
+      reportError("Could not copy the client URL to the clipboard.")
     }
   }
 
