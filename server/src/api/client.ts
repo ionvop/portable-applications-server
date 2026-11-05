@@ -32,6 +32,51 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Listeners notified whenever a request fails with an `ApiError`.
+ *
+ * `request()` emits on every failure, so no call site can swallow an error
+ * silently. The `Toaster` component subscribes to render them; callers that
+ * already show the error inline are unaffected because they still receive the
+ * rejection.
+ */
+type ApiErrorListener = (error: ApiError) => void
+
+const errorListeners = new Set<ApiErrorListener>()
+
+/** Subscribe to failed requests. Returns an unsubscribe function. */
+export function onApiError(listener: ApiErrorListener): () => void {
+  errorListeners.add(listener)
+  return () => {
+    errorListeners.delete(listener)
+  }
+}
+
+function emitApiError(error: ApiError): void {
+  for (const listener of errorListeners) {
+    listener(error)
+  }
+}
+
+/**
+ * Report a non-HTTP failure through the same toast channel.
+ *
+ * Used for failures outside `request()`, such as a denied clipboard write, so
+ * every user-visible failure takes the same path.
+ */
+export function reportError(message: string): void {
+  emitApiError(new ApiError(message, 0))
+}
+
+/** Options accepted by `request` in addition to the fetch options. */
+interface RequestOptions extends RequestInit {
+  /**
+   * Skip the global toast for this call. Used by the 2 s live polling so a
+   * transient blip does not stack identical notifications.
+   */
+  silent?: boolean
+}
+
 /** Read the backend's `{"error": "..."}` body, falling back to the status text. */
 async function readErrorMessage(response: Response): Promise<string> {
   try {
@@ -49,11 +94,30 @@ async function readErrorMessage(response: Response): Promise<string> {
 }
 
 /** Perform a request and parse the JSON response, throwing `ApiError` on failure. */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init)
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { silent = false, ...init } = options
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, init)
+  } catch (cause: unknown) {
+    // A transport failure (server stopped, DNS, offline) never produces a
+    // Response, so it would otherwise bypass the ApiError path entirely.
+    if (cause instanceof DOMException && cause.name === "AbortError") {
+      throw cause
+    }
+    const error = new ApiError(
+      `The server could not be reached${cause instanceof Error ? ` (${cause.message})` : ""}.`,
+      0,
+    )
+    if (!silent) emitApiError(error)
+    throw error
+  }
 
   if (!response.ok) {
-    throw new ApiError(await readErrorMessage(response), response.status)
+    const error = new ApiError(await readErrorMessage(response), response.status)
+    if (!silent) emitApiError(error)
+    throw error
   }
 
   // 204 No Content (e.g. DELETE) has no body to parse.
@@ -61,7 +125,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return undefined as T
   }
 
-  return (await response.json()) as T
+  // A 2xx with a body that is not JSON is still a failure the UI must show;
+  // report it as an ApiError instead of leaking a raw SyntaxError.
+  try {
+    return (await response.json()) as T
+  } catch {
+    const error = new ApiError(
+      "The server sent an unreadable response.",
+      response.status,
+    )
+    if (!silent) emitApiError(error)
+    throw error
+  }
 }
 
 /** JSON request helper for the catalog write endpoints. */
@@ -77,12 +152,12 @@ function jsonRequest<T>(
   })
 }
 
-export function getSystemInfo(): Promise<SystemInfo> {
-  return request<SystemInfo>("/system/info")
+export function getSystemInfo(silent = false): Promise<SystemInfo> {
+  return request<SystemInfo>("/system/info", { silent })
 }
 
-export function listEntries(): Promise<CatalogEntry[]> {
-  return request<CatalogEntry[]>("/catalog")
+export function listEntries(silent = false): Promise<CatalogEntry[]> {
+  return request<CatalogEntry[]>("/catalog", { silent })
 }
 
 export function getEntry(id: number): Promise<CatalogEntry> {
@@ -211,7 +286,8 @@ interface ActivityResponse {
 
 /** Recent transfers, newest first. */
 export async function listTransfers(): Promise<Transfer[]> {
-  const rows = await request<TransferResponse[]>("/transfers")
+  // Polled every 2 s; a transient failure must not stack notifications.
+  const rows = await request<TransferResponse[]>("/transfers", { silent: true })
   return rows.map((row) => ({
     id: row.id,
     entryId: row.entry_id,
@@ -227,7 +303,8 @@ export async function listTransfers(): Promise<Transfer[]> {
 
 /** Merged transfer and catalog event feed for the dashboard. */
 export async function listActivity(): Promise<ActivityItem[]> {
-  const rows = await request<ActivityResponse[]>("/activity")
+  // Polled every 2 s; a transient failure must not stack notifications.
+  const rows = await request<ActivityResponse[]>("/activity", { silent: true })
   return rows.map((row) => ({
     id: row.id,
     message: row.message,
