@@ -60,6 +60,10 @@ def _probe_discovery(port: int, payload: bytes, timeout: float = 1.0) -> dict | 
 
 
 def main() -> int:
+    # The pytest wrapper may call ``main`` after ``check`` was used elsewhere,
+    # and a second run must not inherit the previous run's failures.
+    failures.clear()
+
     db.init_db()
     archive_service.sweep_stale_archives()
     client = create_app().test_client()
@@ -186,6 +190,29 @@ def main() -> int:
     response = client.get("/api/catalog/999999")
     check("missing entry returns 404", response.status_code == 404, response.status_code)
 
+    response = client.put(
+        "/api/catalog/999999",
+        json={"title": "Ghost", "directory": "ghost", "executable": "g.exe"},
+    )
+    check("update missing entry 404", response.status_code == 404, response.status_code)
+    check(
+        "update missing entry carries an error message",
+        bool((response.get_json() or {}).get("error")),
+        response.get_json(),
+    )
+
+    response = client.delete("/api/catalog/999999")
+    check("delete missing entry 404", response.status_code == 404, response.status_code)
+
+    # A malformed body must be rejected rather than silently treated as empty,
+    # which would otherwise surface as a confusing "title is required" error.
+    response = client.post(
+        "/api/catalog",
+        data="not json",
+        content_type="application/json",
+    )
+    check("malformed json body rejected", response.status_code == 400, response.status_code)
+
     print("files")
     response = client.get("/api/files/browse")
     check("browse returns 200", response.status_code == 200)
@@ -202,6 +229,10 @@ def main() -> int:
     check("thumbnail upload 201", response.status_code == 201, response.status_code)
     thumbnail = response.get_json()["thumbnail"]
     check("thumbnail served", client.get(f"/api/files/thumbnail/{thumbnail}").status_code == 200)
+    check(
+        "unknown thumbnail 404",
+        client.get("/api/files/thumbnail/does-not-exist.png").status_code == 404,
+    )
 
     response = client.post(
         "/api/files/thumbnail",
@@ -623,8 +654,8 @@ def main() -> int:
     check("unknown api returns 404 json", response.status_code == 404, response.status_code)
 
     print("cleanup")
-    client.delete(f"/api/catalog/{entry_id}")
-    check("delete returns 204", True)
+    response = client.delete(f"/api/catalog/{entry_id}")
+    check("delete returns 204", response.status_code == 204, response.status_code)
     check("entry gone", client.get(f"/api/catalog/{entry_id}").status_code == 404)
 
     import shutil
