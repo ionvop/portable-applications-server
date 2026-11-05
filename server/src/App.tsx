@@ -73,9 +73,11 @@ function App() {
     setLoading(true)
     setError(null)
     try {
+      // Silent so the fatal path is reported once, by the Retry banner below,
+      // instead of also stacking a toast for the same failure.
       const [info, catalog, transferRows, activityRows] = await Promise.all([
-        getSystemInfo(),
-        listEntries(),
+        getSystemInfo(true),
+        listEntries(true),
         listTransfers(),
         listActivity(),
       ])
@@ -98,12 +100,18 @@ function App() {
     return () => controller.abort()
   }, [load])
 
-  /** Re-read the server snapshot behind the dashboard's headline stats. */
+  /**
+   * Re-read the server snapshot behind the dashboard's headline stats.
+   *
+   * Failures are deliberately *not* rethrown: `request()` already reported them
+   * to the global toast, and this runs from a fire-and-forget refresh where a
+   * rejection would be unhandled.
+   */
   const refreshSystemInfo = useCallback(async () => {
     try {
       setSystemInfo(await getSystemInfo())
-    } catch (cause: unknown) {
-      setError(describeError(cause))
+    } catch {
+      // Reported by the global ApiError toast.
     }
   }, [])
 
@@ -115,8 +123,8 @@ function App() {
       setSelectedEntry((current) =>
         current ? (catalog.find((item) => item.id === current.id) ?? null) : null,
       )
-    } catch (cause: unknown) {
-      setError(describeError(cause))
+    } catch {
+      // Reported by the global ApiError toast.
     }
   }, [])
 
@@ -192,6 +200,9 @@ function App() {
   }, [view])
 
   const navigate = (next: ViewId) => {
+    // A failure banner belongs to the view that produced it; a background
+    // refresh may have recovered by now, so it must not follow the user.
+    setError(null)
     if (next !== "entry") {
       setSelectedEntry(null)
       setIsCreating(false)
