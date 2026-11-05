@@ -21,6 +21,9 @@ venv/
 !pyinstaller.spec
 build/
 
+# Test caches
+.pytest_cache/
+
 # PyInstaller output (build.bat)
 release/
 
