@@ -45,10 +45,17 @@ PyWebView window and no `dist/` build required.
 ## Checks
 
 ```powershell
-python backend/smoke_test.py   # API baseline (no server needed)
+pip install -r backend/requirements-dev.txt   # pytest
+npm run build                                  # the SPA checks read dist/index.html
+npm test                                       # pytest wrapper around smoke_test.py
+python backend/smoke_test.py                   # standalone run, no pytest needed
 npm run lint
-npm run build
 ```
+
+`backend/smoke_test.py` is the single source of truth and covers every API endpoint.
+`tests/test_smoke.py` wraps it for pytest so CI can run it; `tests/conftest.py` points
+`PAS_DATA_DIR` at a temporary folder, so a test run never touches the real `data/`
+catalog. Set `PAS_DATA_DIR` yourself to run the server against an alternate library.
 
 ## Desktop build
 
