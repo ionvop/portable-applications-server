@@ -118,6 +118,11 @@ relative path within that directory.
 rather than a parsed semantic version: bump it after changing an application's files. A blank
 value falls back to `1.0.0`; leaving it unchanged means clients never re-download.
 
+This is the whole update mechanism. There is no content hash and `updated_at` is not exposed
+to clients, so **replacing an application's files without bumping `version` will not reach
+installed clients**. The client's "Verify files" action forces a re-download when an
+administrator needs to repair an install without a version change.
+
 ## Client contract
 
 The client application (`../client`) depends on exactly four things:
@@ -141,6 +146,33 @@ space before starting. A missing catalog entry and a missing application directo
 Downloads are streamed and chunked, so the compressed size is not known when the response
 starts and **no `Content-Length` is sent**. The client already treats a missing length as
 indeterminate progress.
+
+### Trust model
+
+The client-facing surface is **intentionally unauthenticated**. This is a deliberate
+decision, not an omission:
+
+- **`/api/client/*` and `/api/distribution/*` are open to the LAN.** Any machine that can
+  reach the port can list the catalog and download an archive. That is the product: a net
+  café or a home LAN where the server is the trusted source of applications.
+- **Admin endpoints are loopback-only.** `app.py`'s `_guard_admin_api` rejects
+  `/api/catalog`, `/api/files`, `/api/system`, `/api/transfers` and `/api/activity` from any
+  address that is not `127.0.0.1`/`::1`, so `BIND_HOST = "0.0.0.0"` never exposes writes,
+  filesystem browsing or transfer history to the network. The one exemption is
+  `GET /api/files/thumbnail/<name>`, which is read-only and needed by the client catalog.
+- **No CORS is required.** The client application (`../client`) runs its own Flask backend on
+  loopback and proxies every server call through `urllib`, so the browser only ever talks to
+  its own origin. The server sends no `Access-Control-Allow-*` headers and needs none.
+- **No shared secret, token or per-client enrolment.** A token would add ceremony without
+  stopping a threat the loopback guard does not already stop, because the only open endpoints
+  are read-only catalog and download.
+
+**If the network is not trusted**, the documented upgrade path is a shared secret: generate a
+token into `data/`, require it as an `X-PAS-Token` header on `/api/client/*` and
+`/api/distribution/*` only when one is configured, show it in the admin UI, and store it in
+the client's `settings.json`. That is backwards compatible (no token configured = today's
+behaviour) and is the smallest change that closes the gap. It is not implemented because the
+current deployment model does not need it.
 
 ## LAN discovery
 
