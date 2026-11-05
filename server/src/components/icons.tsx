@@ -198,3 +198,13 @@ export function LinkIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5" />
+      <path d="M12 16.25h.01" />
+    </svg>
+  )
+}
