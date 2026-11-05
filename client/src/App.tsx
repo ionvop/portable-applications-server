@@ -483,6 +483,7 @@ function App() {
         description:
           "This application is installed on this computer but is no longer listed on the server.",
         thumbnail: "",
+        version: install.version,
         installed: true,
         installed_version: install.version,
         update_available: false,
