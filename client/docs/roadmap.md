@@ -1,9 +1,9 @@
 ## Current state (verified)
 
-**Steps 1–11 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, refresh-on-focus, and a verified portable Windows build.**
+**Steps 1–12 are done: the client renders a real server catalog, a real local library, real cover art, a working Settings write path, installs that run in the background with live progress, working install/launch/remove actions, a global error surface, refresh-on-focus, a verified portable Windows build, and an automated cross-repo integration test against the real server.**
 
 - `backend` already implements the full contract: `GET /api/health`, `/api/system/info`, `/api/catalog` (server catalog + local install state), `/api/catalog/<id>` (manifest), `/api/apps/installed`, `POST /api/apps/<id>/install|launch`, `DELETE /api/apps/<id>`, `GET|PUT /api/settings`, `POST /api/settings/discover`. Services cover download streaming, zip-slip-safe staged extraction, traversal-safe launch, and atomic settings writes.
-- `smoke_test.py` exercises every endpoint against a stub server — catalog, install (skip-if-current, force, duplicate-attach, partial progress, failure, stale reconcile), jobs, thumbnails (including non-image/empty/oversized), `settings/test`, `settings/discover`, launch, remove, reset, and the SPA fallback — 160 checks in all. `pytest` runs the same suite against a temporary `data/`.
+- `smoke_test.py` exercises every endpoint against a stub server — catalog, install (skip-if-current, force, duplicate-attach, partial progress, failure, stale reconcile), jobs, thumbnails (including non-image/empty/oversized), `settings/test`, `settings/discover`, launch, remove, reset, the SPA fallback, a chunked download with no `Content-Length`, and a version bump that must trigger a re-download — 164 checks in all. `pytest` runs the same suite against a temporary `data/`, plus a cross-repo integration test against the real server.
 - `vite.config.ts` already proxies `/api` → `127.0.0.1:8757`, and `npm run dev:api` exists.
 - `types.ts` mirrors the wire exactly, and `src/api/client.ts` is the only fetch layer (`request<T>()`, `ApiError`, typed calls for all 11 endpoints).
 - `App.tsx` fetches `system`, `catalog`, `installs` and `settings` on mount, keeps `loading` / `systemError` / `catalogError` separate, and derives a `ConnectionState` (`connected` / `unreachable` / `unconfigured`) that the navbar, footer and Settings all render.
@@ -20,6 +20,8 @@
    now describe the wired UI.
 6. ~~**The packaged build was never verified.**~~ **Done in Step 11** — `build.bat` now builds,
    self-tests the frozen exe in place and from a copy, and refuses to ship a stale `data/`.
+7. ~~**The server contract was only tested against a stub.**~~ **Done in Step 12** —
+   `backend/tests/test_integration.py` drives the real server in a subprocess.
 
 ---
 
@@ -370,3 +372,37 @@ Portable Applications Server on the LAN:
    rather than crash.
 
 If anything fails, `data\client.log` beside the exe records what happened.
+
+---
+
+## Step 12 — Server integration verification ✅
+
+The manual check above is the only thing the automated suite could not cover, because
+`smoke_test.py` runs against a *stub* that implements the server contract. A stub cannot catch
+contract drift: if the server renamed a field or changed a status code, the stub would keep
+answering the old shape and every check would stay green.
+
+**Implemented:**
+
+- **`backend/tests/test_integration.py`** starts the real server package in a subprocess on an
+  ephemeral port (a subprocess, not an import, because both repositories have a `backend`
+  package and would collide in `sys.modules`), publishes a fixture application through the
+  server's admin API, and drives the client's real services through catalog → manifest →
+  download → extract → install row → launch → version bump → re-install. It asserts the
+  listing omits `executable`, the manifest discloses it, the archive is cleaned up, the launch
+  uses the resolved path, a version bump triggers exactly one re-download, and a current
+  install triggers none. Skipped unless `PAS_SERVER_DIR` points at the server checkout.
+- **Two smoke-test gaps closed.** The stub always sent `Content-Length`, but the real server
+  streams chunked and never does — so the manifest-size fallback that drives the progress bar
+  was untested. A new `chunked download` section reproduces the real behaviour. A new `update`
+  section bumps the stub's published version and asserts a plain install (no `force`)
+  re-downloads and records the new version; nothing previously exercised that path.
+- **Published version in the listing.** `GET /api/catalog` now carries `version` alongside
+  `installed_version`, so the Store renders `v1.0.0 → v2.0.0` and the detail view shows an
+  "Available version" row.
+- **Trust model recorded.** LAN-only binding, no token, no CORS — documented in both READMEs
+  and in the server's roadmap Step 11, with the shared secret named as the upgrade path.
+
+**Verified:** `smoke_test.py` (all checks green, including the two new sections), `pytest`
+(20 tests, including the integration test with `PAS_SERVER_DIR=../server`), `npm run build`,
+`npm run lint`, and the server's own `pytest` suite.
