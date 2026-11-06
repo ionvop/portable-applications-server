@@ -2,7 +2,8 @@
 
 Starts the Flask server on a background thread, waits until it accepts
 connections, then opens the PyWebView window. Closing the window shuts the
-server down cleanly.
+server down cleanly, so the close is intercepted and confirmed in the UI first:
+the server is what every client on the local network talks to.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from werkzeug.serving import make_server
 
 from . import config, db, paths
 from .app import create_app
+from .desktop import CloseGuard, DesktopApi
 from .services import archive_service, network_service, transfer_service
 
 
@@ -81,16 +83,26 @@ def main() -> int:
 
     import webview  # imported late so the API can be tested without a GUI
 
+    # Closing the window stops the server, so the close is confirmed in the UI
+    # instead of happening on the first click. The guard cancels the close and
+    # asks the page; the page answers through ``window.pywebview.api``.
+    guard = CloseGuard()
+    api = DesktopApi(guard)
+
     window = webview.create_window(
         config.APP_NAME,
         f"http://{config.UI_HOST}:{config.PORT}/",
         width=1280,
         height=800,
         min_size=(960, 640),
+        js_api=api,
     )
+    window.events.closing += guard.on_closing
+    guard.start(window)
     try:
         webview.start()
     finally:
+        guard.stop()
         discovery.stop()
         server.shutdown()
         server.join(timeout=5)
