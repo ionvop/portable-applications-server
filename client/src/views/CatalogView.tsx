@@ -23,7 +23,7 @@ const filters: { id: Filter; label: string }[] = [
   { id: "updates", label: "Updates" },
 ]
 
-/** Storefront: browse the catalog, filter it, and open an app. */
+/** Catalog: browse the server's apps, filter them, and open one. */
 export function CatalogView({ apps, query, onQueryChange, onOpenApp }: CatalogViewProps) {
   const [layout, setLayout] = useState<Layout>("grid")
   const [filter, setFilter] = useState<Filter>("all")
