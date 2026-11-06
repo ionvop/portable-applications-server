@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import "./App.css"
 import type {
+  AutoConnectResult,
   CatalogApp,
   ConnectionState,
   Install,
@@ -12,6 +13,7 @@ import type {
 } from "./types"
 import {
   ApiError,
+  autoConnect,
   getCatalog,
   getInstalled,
   getJobs,
@@ -55,6 +57,18 @@ const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
 /** Turns any thrown value into text the UI can show. */
 function messageFor(cause: unknown, fallback: string): string {
   return cause instanceof ApiError ? cause.message : fallback
+}
+
+/**
+ * Whether a failure means "the server could not be reached" rather than "the
+ * server answered with an error".
+ *
+ * The backend maps a connection failure to `503` and collapses upstream `5xx`
+ * to `502`, so only `503` justifies rediscovering the address. A `0` means the
+ * local client backend itself is down, which rediscovery cannot fix.
+ */
+function isUnreachable(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status === 503
 }
 
 function App() {
@@ -107,6 +121,25 @@ function App() {
   }, [theme])
 
   /**
+   * Ask the backend to resolve a usable server address, rediscovering one when
+   * the stored address is missing or dead.
+   *
+   * Returns `null` when the call itself failed. That degrades to "no address":
+   * the catalog request that follows reports the real problem, and a failed
+   * auto-connect must not blank the shell.
+   */
+  const resolveServer = useCallback(
+    async (forceDiscovery: boolean): Promise<AutoConnectResult | null> => {
+      try {
+        return await autoConnect(forceDiscovery)
+      } catch {
+        return null
+      }
+    },
+    [],
+  )
+
+  /**
    * Fetch everything the shell needs. State is only written after an `await`,
    * so mounting the effect never triggers a synchronous cascading render.
    */
@@ -124,10 +157,19 @@ function App() {
       return
     }
     if (id !== requestId.current) return
-    setSystem(info)
+
+    // No address stored yet: ask the backend to find one on the LAN before the
+    // catalog request, so a first run connects without opening Settings.
+    let serverUrl = info.server_url
+    if (!serverUrl) {
+      const resolved = await resolveServer(false)
+      if (id !== requestId.current) return
+      serverUrl = resolved?.server_url ?? ""
+    }
+    setSystem(serverUrl === info.server_url ? info : { ...info, server_url: serverUrl })
 
     // The catalog needs a server address; without one the request is pointless.
-    const catalogRequest: Promise<CatalogApp[]> = info.server_url
+    const catalogRequest: Promise<CatalogApp[]> = serverUrl
       ? getCatalog()
       : Promise.reject(
           new ApiError(
@@ -140,11 +182,38 @@ function App() {
       await Promise.allSettled([catalogRequest, getInstalled(), getSettings(), getJobs()])
     if (id !== requestId.current) return
 
-    if (catalogResult.status === "fulfilled") {
-      setCatalog(catalogResult.value)
+    // A stored address that could not be reached is likely stale (the server
+    // moved to a new lease). Rediscover once and retry the catalog, so the
+    // client recovers without the user opening Settings. Only a connectivity
+    // failure qualifies: a 5xx from a server that did answer is not an address
+    // problem, and rediscovering would just swap a working server for another.
+    let catalogOutcome = catalogResult
+    let settingsOutcome = settingsResult
+    if (catalogOutcome.status === "rejected" && serverUrl && isUnreachable(catalogOutcome.reason)) {
+      const resolved = await resolveServer(true)
+      if (id !== requestId.current) return
+      // Retry whenever a server now answers, even at the same address: the
+      // stored one may simply have been slow to come up.
+      if (resolved?.connected) {
+        if (resolved.server_url !== serverUrl) {
+          serverUrl = resolved.server_url
+          setSystem({ ...info, server_url: serverUrl })
+        }
+        const [retriedCatalog, refreshedSettings] = await Promise.allSettled([
+          getCatalog(),
+          getSettings(),
+        ])
+        if (id !== requestId.current) return
+        catalogOutcome = retriedCatalog
+        settingsOutcome = refreshedSettings
+      }
+    }
+
+    if (catalogOutcome.status === "fulfilled") {
+      setCatalog(catalogOutcome.value)
     } else {
       setCatalog([])
-      setCatalogError(messageFor(catalogResult.reason, "Could not load the catalog."))
+      setCatalogError(messageFor(catalogOutcome.reason, "Could not load the catalog."))
     }
 
     // Installs, settings and jobs are local, so a failure here is unexpected
@@ -152,9 +221,9 @@ function App() {
     // The failure is still reported, because an empty Library that is really a
     // failed read is exactly the kind of silent lie this step removes.
     setInstalls(installsResult.status === "fulfilled" ? installsResult.value : [])
-    setSettings(settingsResult.status === "fulfilled" ? settingsResult.value : null)
+    setSettings(settingsOutcome.status === "fulfilled" ? settingsOutcome.value : null)
 
-    const localFailure = [installsResult, settingsResult, jobsResult].find(
+    const localFailure = [installsResult, settingsOutcome, jobsResult].find(
       (result) => result.status === "rejected",
     )
     if (localFailure?.status === "rejected") {
@@ -166,7 +235,7 @@ function App() {
     setJobs(initialJobs)
 
     setLoading(false)
-  }, [])
+  }, [resolveServer])
 
   useEffect(() => {
     // `load` only writes state after its first `await`, so this cannot cascade
