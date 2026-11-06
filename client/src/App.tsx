@@ -36,7 +36,7 @@ import { SettingsView } from "./views/SettingsView"
 /** Page heading shown above each screen. The detail view brings its own. */
 const pageMeta: Record<ViewId, { title: string; subtitle: string }> = {
   catalog: {
-    title: "Store",
+    title: "Catalog",
     subtitle: "Games and applications available on the local network",
   },
   app: { title: "App details", subtitle: "Install and launch this application" },
@@ -82,7 +82,7 @@ function App() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
   /**
-   * The Store's search text. It lives here rather than in `CatalogView`
+   * The Catalog's search text. It lives here rather than in `CatalogView`
    * because the navbar search edits the same query, so the two inputs cannot
    * disagree about what is being filtered.
    */
@@ -105,7 +105,7 @@ function App() {
   const requestId = useRef(0)
 
   // Job ids that were running at the last poll. A job that disappears from this
-  // set has finished, which is the cue to refresh the Library and the Store.
+  // set has finished, which is the cue to refresh the Library and the Catalog.
   const activeJobIds = useRef<Set<number>>(new Set())
 
   // A single failed poll is transient (the next tick retries in one second), so
@@ -246,7 +246,7 @@ function App() {
 
   /**
    * Re-read the local install list and the catalog after an install finishes,
-   * so the Library gains the app and the Store flips to "Installed" without a
+   * so the Library gains the app and the Catalog flips to "Installed" without a
    * manual reload.
    */
   const refreshAfterInstall = useCallback(async () => {
@@ -445,7 +445,7 @@ function App() {
       })
 
     if (!next.server_url) {
-      // Nothing to fetch: mirror the mount-time short circuit so the Store
+      // Nothing to fetch: mirror the mount-time short circuit so the Catalog
       // says "No server set" instead of "Server unreachable".
       setCatalog([])
       setCatalogError(
@@ -490,7 +490,7 @@ function App() {
   /** Launch an installed application; the backend detaches the process. */
   const startLaunch = (entryId: number) => launchApp(entryId)
 
-  /** Remove an install and its files, then refresh the Library and the Store. */
+  /** Remove an install and its files, then refresh the Library and the Catalog. */
   const removeInstall = async (entryId: number): Promise<void> => {
     await removeApp(entryId)
     await refreshAfterInstall()
@@ -498,7 +498,7 @@ function App() {
 
   /**
    * Delete every install, cached cover and transfer record, then re-read the
-   * shell state so the Library empties and the Store flips back to "Install".
+   * shell state so the Library empties and the Catalog flips back to "Install".
    *
    * The backend refuses with `409` while an install is running; that message is
    * rethrown so `SettingsView` can show it next to the button.
@@ -525,8 +525,8 @@ function App() {
   }
 
   /**
-   * The navbar search and the Store's search are one query. Typing in the
-   * navbar jumps to the Store so the results are actually visible; clearing it
+   * The navbar search and the Catalog's search are one query. Typing in the
+   * navbar jumps to the Catalog so the results are actually visible; clearing it
    * leaves the user where they are.
    */
   const handleCatalogQueryChange = (next: string) => {
