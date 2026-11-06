@@ -1,4 +1,5 @@
 import type {
+  AutoConnectResult,
   CatalogApp,
   CatalogDetail,
   ConnectionTest,
@@ -176,6 +177,22 @@ export function updateSettings(serverUrl: string): Promise<Settings> {
 /** `POST /api/settings/discover` */
 export function discoverServer(): Promise<DiscoveryReply> {
   return request("/settings/discover", { method: "POST" })
+}
+
+/**
+ * `POST /api/settings/auto-connect`
+ *
+ * Resolves a usable server at startup: the stored address when it still
+ * answers, otherwise a freshly discovered one. Never fails when no server is
+ * found — the result reports `connected: false` instead. Pass
+ * `forceDiscovery` when the stored address is already known to be dead, so the
+ * backend skips probing it again.
+ */
+export function autoConnect(forceDiscovery = false): Promise<AutoConnectResult> {
+  return request("/settings/auto-connect", {
+    method: "POST",
+    body: JSON.stringify({ force_discovery: forceDiscovery }),
+  })
 }
 
 /**
