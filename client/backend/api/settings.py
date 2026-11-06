@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, request
 
 from .. import settings
 from ..errors import ClientError
-from ..services import discovery_service, server_client
+from ..services import connection_service, discovery_service, server_client
 
 bp = Blueprint("settings", __name__, url_prefix="/api/settings")
 
@@ -83,6 +83,26 @@ def discover():
             status=404,
         )
     return jsonify(reply)
+
+
+@bp.post("/auto-connect")
+def auto_connect():
+    """Resolve a usable server at startup, rediscovering a stale address.
+
+    Unlike ``/discover``, this never fails when nothing answers: "no server on
+    the network" is a normal state the UI renders as *No server set*. The
+    optional body ``{"force_discovery": true}`` skips the stored-address probe,
+    which the UI uses after a catalog request already proved it dead.
+    """
+    body = request.get_json(silent=True)
+    force = False
+    if isinstance(body, dict):
+        raw = body.get("force_discovery", False)
+        if not isinstance(raw, bool):
+            raise ClientError("'force_discovery' must be a boolean.", status=400)
+        force = raw
+
+    return jsonify(connection_service.auto_connect(force_discovery=force))
 
 
 @bp.errorhandler(ClientError)
