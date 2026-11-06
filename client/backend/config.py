@@ -26,6 +26,11 @@ DISCOVERY_TIMEOUT_SECONDS = 2.0
 # Timeout for ordinary JSON requests to the server.
 HTTP_TIMEOUT_SECONDS = 10.0
 
+# Timeout for the startup auto-connect health probe. Deliberately short: a
+# stale address can black-hole the connection, and the user is waiting on the
+# window, so a dead server must be ruled out quickly before discovery runs.
+AUTO_CONNECT_TIMEOUT_SECONDS = 3.0
+
 # Timeout for a cover image. Covers are small, so a slow reply is a failure.
 THUMBNAIL_TIMEOUT_SECONDS = 15.0
 
