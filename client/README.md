@@ -156,7 +156,7 @@ folder, the port actually bound, and any unhandled exception.
 The client is feature-complete for its intended use: browse the server catalog, install in the
 background with live progress, launch, and remove — all from one window.
 
-- **Store** — the server catalog with cover art, search, and `All` / `Installed` / `Updates`
+- **Catalog** — the server catalog with cover art, search, and `All` / `Installed` / `Updates`
   filters. Covers are proxied and cached by the backend, so the UI never needs CORS. Each row
   shows the published version next to the installed one, so an update reads `v1.0.0 → v2.0.0`.
 - **Library** — what is actually installed on this machine, read from `client.db` rather than
