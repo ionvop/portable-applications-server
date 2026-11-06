@@ -1,13 +1,13 @@
 import type { ConnectionState, ThemeId, ViewId } from "../../types"
 import { describeConnection } from "../../lib/connection"
 import {
+  CatalogIcon,
   DownloadsIcon,
   GamepadIcon,
   LibraryIcon,
   MoonIcon,
   SearchIcon,
   SettingsIcon,
-  StoreIcon,
   SunIcon,
 } from "../icons"
 
@@ -16,15 +16,15 @@ interface NavBarProps {
   connection: ConnectionState
   serverUrl: string
   theme: ThemeId
-  /** The Store's search text — the navbar box edits the same query. */
+  /** The Catalog's search text — the navbar box edits the same query. */
   query: string
   onNavigate: (view: ViewId) => void
   onToggleTheme: () => void
   onQueryChange: (query: string) => void
 }
 
-const navItems: { id: ViewId; label: string; icon: typeof StoreIcon }[] = [
-  { id: "catalog", label: "Store", icon: StoreIcon },
+const navItems: { id: ViewId; label: string; icon: typeof CatalogIcon }[] = [
+  { id: "catalog", label: "Catalog", icon: CatalogIcon },
   { id: "library", label: "Library", icon: LibraryIcon },
   { id: "downloads", label: "Downloads", icon: DownloadsIcon },
   { id: "settings", label: "Settings", icon: SettingsIcon },
@@ -50,7 +50,7 @@ export function NavBar({
           type="button"
           className="flex items-center gap-3"
           onClick={() => onNavigate("catalog")}
-          aria-label="Go to the store"
+          aria-label="Go to the catalog"
         >
           <div className="grid size-10 place-items-center rounded-box bg-primary text-primary-content">
             <GamepadIcon width={22} height={22} />
@@ -64,7 +64,7 @@ export function NavBar({
         <ul className="menu menu-horizontal hidden gap-1 md:flex">
           {navItems.map((item) => {
             const Icon = item.icon
-            // The detail screen belongs to the store tab.
+            // The detail screen belongs to the catalog tab.
             const isActive =
               activeView === item.id || (item.id === "catalog" && activeView === "app")
             return (
