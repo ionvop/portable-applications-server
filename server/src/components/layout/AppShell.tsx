@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import type { ViewId } from "../../types"
+import { CloseGuard } from "../CloseGuard"
 import { Toaster } from "../Toaster"
 import { Sidebar } from "./Sidebar"
 import { TopBar } from "./TopBar"
@@ -43,6 +44,7 @@ export function AppShell({
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
       <Toaster />
+      <CloseGuard />
     </div>
   )
 }
