@@ -63,7 +63,7 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
               <DownloadIcon width={28} height={28} className="opacity-40" />
               <p className="text-sm font-medium">Nothing has been downloaded yet</p>
               <p className="max-w-md text-xs text-base-content/60">
-                Installs you start from the Store appear here, and the list is kept across
+                Installs you start from the Catalog appear here, and the list is kept across
                 restarts.
               </p>
             </div>
