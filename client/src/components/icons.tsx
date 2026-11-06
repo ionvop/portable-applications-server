@@ -19,7 +19,7 @@ function base(props: IconProps): IconProps {
   }
 }
 
-export function StoreIcon(props: IconProps) {
+export function CatalogIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="M3.5 9.5V19a1 1 0 0 0 1 1H9v-5.5h6V20h4.5a1 1 0 0 0 1-1V9.5" />
