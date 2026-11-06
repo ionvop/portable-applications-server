@@ -26,6 +26,7 @@ from backend.app import create_app
 from backend.errors import ClientError
 from backend.models import Install
 from backend.services import (
+    connection_service,
     discovery_service,
     install_service,
     job_service,
@@ -378,6 +379,102 @@ def main() -> int:
             "discovery ignores a non-object payload",
             discovery_service._parse_reply(b"[1, 2]", ("10.0.0.7", 8758)) is None,
         )
+
+        print("settings/auto-connect")
+        # Startup auto-connect is orchestration, so both the broadcast and the
+        # health probe are stubbed: the checks below are about the decision
+        # (probe, discover, persist) rather than about UDP or HTTP.
+        original_discover = discovery_service.discover
+        original_check_health = server_client.check_health
+        discovered = {
+            "server_url": "http://192.168.254.106:8756",
+            "app": "Portable Applications Server",
+            "version": "0.1.0",
+            "host": "192.168.254.106",
+        }
+        healthy: set[str] = set()
+        broadcasts: list[int] = []
+        # Whether the broadcast gets an answer at all, independent of whether
+        # that answer then passes its health check.
+        responds = [True]
+
+        def fake_discover(*_args, **_kwargs):
+            broadcasts.append(1)
+            return dict(discovered) if responds[0] else None
+
+        def fake_check_health(url=None, timeout=None):
+            if url not in healthy:
+                raise ClientError(f"Could not reach the server at {url}.", status=503)
+            return {"status": "ok"}
+
+        try:
+            discovery_service.discover = fake_discover
+            server_client.check_health = fake_check_health
+
+            # A stored address that still answers is kept, with no broadcast.
+            settings.set_server_url(server_url)
+            healthy.update({server_url, discovered["server_url"]})
+            broadcasts.clear()
+            result = connection_service.auto_connect()
+            check("auto-connect keeps a healthy stored url", result["server_url"] == server_url, result)
+            check("auto-connect reports connected", result["connected"] is True, result)
+            check("auto-connect does not broadcast when healthy", not broadcasts, broadcasts)
+            check("auto-connect leaves settings alone when healthy", settings.get_server_url() == server_url)
+
+            # No stored address: discovery supplies one and it is persisted.
+            settings.set_server_url("")
+            result = connection_service.auto_connect()
+            check("auto-connect discovers when unset", result["server_url"] == discovered["server_url"], result)
+            check("auto-connect reports the change", result["changed"] is True, result)
+            check("auto-connect persists the discovery", settings.get_server_url() == discovered["server_url"])
+            check("auto-connect records discovered_at", bool(settings.load()["discovered_at"]))
+
+            # A stale stored address is replaced by the discovered one.
+            settings.set_server_url("http://10.0.0.99:8756")
+            result = connection_service.auto_connect()
+            check("auto-connect replaces a stale url", result["server_url"] == discovered["server_url"], result)
+            check("auto-connect persists the replacement", settings.get_server_url() == discovered["server_url"])
+
+            # Nothing answers: the stored value survives and the caller is told.
+            settings.set_server_url("http://10.0.0.99:8756")
+            healthy.clear()
+            responds[0] = False
+            result = connection_service.auto_connect()
+            check("auto-connect reports no connection", result["connected"] is False, result)
+            check("auto-connect keeps the stored url when nothing answers", result["server_url"] == "http://10.0.0.99:8756", result)
+            check("auto-connect does not persist a failed discovery", settings.get_server_url() == "http://10.0.0.99:8756")
+
+            # A responder that fails its health check must not be persisted.
+            settings.set_server_url("")
+            healthy.clear()
+            responds[0] = True
+            result = connection_service.auto_connect()
+            check("auto-connect ignores an unhealthy responder", result["connected"] is False, result)
+            check("auto-connect reports the unhealthy reply", result["discovered"] is True, result)
+            check("auto-connect does not persist an unhealthy responder", settings.get_server_url() == "")
+
+            # ``force_discovery`` skips the stored-address probe entirely.
+            settings.set_server_url(server_url)
+            healthy.update({server_url, discovered["server_url"]})
+            broadcasts.clear()
+            result = connection_service.auto_connect(force_discovery=True)
+            check("auto-connect force broadcasts", bool(broadcasts), broadcasts)
+            check("auto-connect force adopts the discovery", result["server_url"] == discovered["server_url"], result)
+
+            # The endpoint mirrors the service and never 404s on silence.
+            settings.set_server_url("")
+            healthy.clear()
+            responds[0] = False
+            response = client.post("/api/settings/auto-connect")
+            check("auto-connect endpoint returns 200", response.status_code == 200, response.status_code)
+            check("auto-connect endpoint reports no connection", response.get_json()["connected"] is False, response.get_json())
+
+            response = client.post("/api/settings/auto-connect", json={"force_discovery": "yes"})
+            check("auto-connect rejects a non-boolean force", response.status_code == 400, response.status_code)
+        finally:
+            discovery_service.discover = original_discover
+            server_client.check_health = original_check_health
+            settings.set_server_url(server_url)
 
         print("catalog")
         response = client.get("/api/catalog")
