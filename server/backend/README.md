@@ -33,6 +33,13 @@ python run.py
 
 A PyWebView window opens at `http://127.0.0.1:8756/`. Closing the window stops the server.
 
+Because the server runs inside the desktop process, closing the window takes it down for
+every client on the network. The close is therefore intercepted: `backend/desktop.py`
+cancels it and asks the page to confirm, and the UI shows a "Stop the server?" dialog.
+Confirming destroys the window (and stops the server); cancelling leaves both running.
+If the page cannot answer — it has not loaded yet, or the JS bridge is unavailable — the
+window closes anyway so it can never become unclosable.
+
 ## Development (hot reload)
 
 `run.py` requires a built frontend and opens a desktop window, which is awkward while
