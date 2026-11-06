@@ -99,7 +99,7 @@ export function LibraryView({
             Apps you install will be stored here and stay ready to launch.
           </p>
           <button type="button" className="btn btn-sm btn-primary mt-2" onClick={onBrowse}>
-            Browse the store
+            Browse the catalog
           </button>
         </div>
       </div>
@@ -235,7 +235,7 @@ export function LibraryView({
         title="Remove this application?"
         message={
           pendingRemove
-            ? `${pendingRemove.title} and its files will be deleted from this computer. You can install it again from the Store.`
+            ? `${pendingRemove.title} and its files will be deleted from this computer. You can install it again from the Catalog.`
             : ""
         }
         confirmLabel="Remove"
