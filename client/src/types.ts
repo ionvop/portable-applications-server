@@ -124,6 +124,22 @@ export interface ConnectionTest {
   server_url: string
 }
 
+/**
+ * The reply from `POST /api/settings/auto-connect`.
+ *
+ * `server_url` is the address the client should use now — the stored one when
+ * nothing better was found, possibly empty. `changed` reports whether the
+ * persisted address was replaced, `connected` whether a server answered a
+ * health check, and `discovered` whether a discovery reply arrived at all
+ * (even one that then failed the health check).
+ */
+export interface AutoConnectResult {
+  server_url: string
+  changed: boolean
+  connected: boolean
+  discovered: boolean
+}
+
 /** The reply from `POST /api/apps/<id>/launch`. */
 export interface LaunchResult {
   entry_id: number
