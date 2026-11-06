@@ -124,7 +124,21 @@ All endpoints are loopback-only; the client never exposes anything to the LAN.
 | PUT | `/api/settings` | Set `server_url` |
 | POST | `/api/settings/test` | Probe a server's `/api/health` (read-only; optional `{"server_url": …}`) |
 | POST | `/api/settings/discover` | Broadcast a discovery probe and remember the reply |
+| POST | `/api/settings/auto-connect` | Startup resolution: keep a healthy stored address, else rediscover and verify (optional `{"force_discovery": true}`) |
 | GET | `/api/thumbnails/<name>` | Proxy and cache a cover image from the server |
+
+### Startup auto-connect
+
+The UI calls `POST /api/settings/auto-connect` once while loading. The service
+(`services/connection_service.py`) health-checks the stored address with the short
+`AUTO_CONNECT_TIMEOUT_SECONDS` (3 s) and keeps it when it answers — no broadcast is sent, so a
+healthy client starts instantly. Otherwise it broadcasts a discovery probe and persists the reply
+**only after** that address passes the same health check, so a half-started or hostile responder
+cannot overwrite a working address. When nothing answers the stored value is left untouched and
+the endpoint still returns `200` with `connected: false`; "no server on the network" is a normal
+state, not an error. The response is `{server_url, changed, connected, discovered}`.
+`force_discovery: true` skips the stored-address probe, which the UI uses after a catalog request
+already proved the address dead.
 
 ### Catalog payload
 
