@@ -231,7 +231,7 @@ refreshed after the administrator bumps it. A blank catalog version would disabl
 detection entirely, so the server always publishes one (default `1.0.0`).
 
 The client's own `GET /api/catalog` also carries the published `version` next to
-`installed_version`, so the Store can render `v1.0.0 → v2.0.0` without opening the detail view.
+`installed_version`, so the Catalog can render `v1.0.0 → v2.0.0` without opening the detail view.
 There is no content hash and no `updated_at` comparison: replacing an application's files
 without bumping `version` will not reach installed clients, which is why "Verify files" exists
 as a forced re-download.
@@ -336,11 +336,11 @@ The React UI is wired to every endpoint above. The pieces worth knowing about:
   endpoint has a typed function. `src/types.ts` mirrors the wire shapes exactly.
 - **`App.tsx` owns the state.** It loads `system` first (the gate), then `catalog`, `installs`,
   `settings` and `jobs` together, keeping `systemError` (full-screen) separate from
-  `catalogError` (inline in the Store). It also owns the three write paths — `startInstall`,
+  `catalogError` (inline in the Catalog). It also owns the three write paths — `startInstall`,
   `startLaunch`, `removeInstall` — and the views keep only transient `busy`/`error` state.
 - **Installs are followed by polling.** `App.tsx` polls `GET /api/jobs` once a second *only*
   while a job is active, and refetches `installs` + `catalog` when one leaves the active set,
-  so the Library and Store update without a reload. `DownloadsView` and `AppDetailView` share
+  so the Library and Catalog update without a reload. `DownloadsView` and `AppDetailView` share
   the `JobProgress` component, which is where the `~` estimate prefix and the 100% clamp live.
 - **Errors are never silent.** `ErrorBanner` renders a dismissible `alert alert-error` inside
   `AppShell`, so every screen inherits it. The job poll escalates only after three consecutive
