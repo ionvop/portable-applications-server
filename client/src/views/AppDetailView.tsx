@@ -104,13 +104,13 @@ export function AppDetailView({
       <div className="flex items-center gap-3">
         <button type="button" className="btn btn-ghost btn-sm gap-2" onClick={onBack}>
           <ArrowLeftIcon width={16} height={16} />
-          Back to store
+          Back to catalog
         </button>
         <div className="breadcrumbs py-0 text-xs">
           <ul>
             <li>
               <button type="button" className="link link-hover" onClick={onBack}>
-                Store
+                Catalog
               </button>
             </li>
             <li>{app.title}</li>
