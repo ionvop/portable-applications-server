@@ -10,7 +10,7 @@ interface AppShellProps {
   serverUrl: string
   version: string
   theme: ThemeId
-  /** The Store's search text, shared with the navbar search box. */
+  /** The Catalog's search text, shared with the navbar search box. */
   query: string
   /** Latest shell-level failure, or `null` when there is nothing to report. */
   error?: string | null
