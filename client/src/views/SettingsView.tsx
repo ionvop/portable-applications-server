@@ -348,7 +348,7 @@ export function SettingsView({
         message={
           system.installed_count === 0
             ? "No applications are installed. The cached covers and transfer history will still be cleared."
-            : `All ${system.installed_count} installed application${system.installed_count === 1 ? "" : "s"}, their files, the cached covers and the transfer history will be deleted from this computer. They can be installed again from the Store.`
+            : `All ${system.installed_count} installed application${system.installed_count === 1 ? "" : "s"}, their files, the cached covers and the transfer history will be deleted from this computer. They can be installed again from the Catalog.`
         }
         confirmLabel="Reset"
         busy={busy === "reset"}
