@@ -32,15 +32,20 @@ ProgressCallback = Callable[[int, "int | None"], None]
 MAX_COVER_BYTES = config.MAX_THUMBNAIL_BYTES
 
 
-def check_health(server_url: str | None = None) -> dict[str, Any]:
+def check_health(
+    server_url: str | None = None, timeout: float | None = None
+) -> dict[str, Any]:
     """Probe the server's ``/api/health`` and return its payload.
 
     Used by ``POST /api/settings/test``: the browser cannot call the server
     directly (it sends no CORS headers), so the probe runs here instead. A
     reachable server that answers anything other than ``{"status": "ok"}`` is
     reported as an upstream failure rather than a success.
+
+    ``timeout`` overrides ``config.HTTP_TIMEOUT_SECONDS``; the startup
+    auto-connect path passes a shorter one so a stale address fails fast.
     """
-    payload = _get_json("/api/health", server_url)
+    payload = _get_json("/api/health", server_url, timeout=timeout)
     if not isinstance(payload, dict) or payload.get("status") != "ok":
         raise ClientError(
             "The server answered, but not with a healthy status.", status=502
@@ -180,7 +185,9 @@ def iter_download(
         ) from error
 
 
-def _get_json(path: str, server_url: str | None) -> Any:
+def _get_json(
+    path: str, server_url: str | None, timeout: float | None = None
+) -> Any:
     """GET ``path`` and decode the JSON body."""
     base = _base_url(server_url)
     request = urllib.request.Request(
@@ -188,7 +195,8 @@ def _get_json(path: str, server_url: str | None) -> Any:
     )
     try:
         with urllib.request.urlopen(
-            request, timeout=config.HTTP_TIMEOUT_SECONDS
+            request,
+            timeout=config.HTTP_TIMEOUT_SECONDS if timeout is None else timeout,
         ) as response:
             body = response.read()
     except urllib.error.HTTPError as error:
