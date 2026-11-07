@@ -11,7 +11,6 @@ interface AppShellProps {
   subtitle: string
   lanIp: string
   port: number
-  version: string
   onNavigate: (view: ViewId) => void
   children: ReactNode
 }
@@ -22,17 +21,12 @@ export function AppShell({
   subtitle,
   lanIp,
   port,
-  version,
   onNavigate,
   children,
 }: AppShellProps) {
   return (
     <div className="flex h-full bg-base-100 text-base-content">
-      <Sidebar
-        activeView={activeView}
-        onNavigate={onNavigate}
-        version={version}
-      />
+      <Sidebar activeView={activeView} onNavigate={onNavigate} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
           title={title}
