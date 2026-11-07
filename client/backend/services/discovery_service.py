@@ -1,10 +1,10 @@
-"""LAN auto-discovery of the Portable Applications Server.
+"""LAN auto-discovery of CHU2CORE.
 
 The client broadcasts a fixed magic payload to the subnet broadcast address on
 ``config.DISCOVERY_PORT`` and waits for a JSON reply::
 
     request   b"PORTABLE_APPS_DISCOVER_V1"
-    response  {"app": "Portable Applications Server", "version": "0.1.0",
+    response  {"app": "CHU2CORE", "version": "0.1.0",
                "port": 8756}
 
 The responder lives in the server (see ``backend/README.md``, "Server contract
