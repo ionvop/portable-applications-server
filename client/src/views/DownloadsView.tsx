@@ -22,7 +22,7 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="card-title text-sm">Active transfers</h2>
@@ -35,7 +35,7 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
           </div>
 
           {active.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-field bg-base-100 px-3 py-4 text-xs text-base-content/60">
+            <div className="flex items-center gap-2 rounded-field bg-base-100/60 px-3 py-4 text-xs text-base-content/60">
               <CheckIcon width={16} height={16} className="text-success" />
               Nothing is downloading right now.
             </div>
@@ -49,7 +49,7 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-0 p-0">
           <div className="flex items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
             <h2 className="card-title text-sm">History</h2>
@@ -83,7 +83,7 @@ export function DownloadsView({ jobs }: DownloadsViewProps) {
 /** A running job: title plus the shared live progress block. */
 function ActiveJobRow({ job }: { job: Job }) {
   return (
-    <li className="rounded-field bg-base-100 px-3 py-3">
+    <li className="rounded-field bg-base-100/60 px-3 py-3">
       <p className="truncate text-sm font-medium">
         {job.title || `Application ${job.entry_id}`}
       </p>
