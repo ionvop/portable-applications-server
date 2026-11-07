@@ -1,4 +1,4 @@
-"""HTTP client for the Portable Applications Server.
+"""HTTP client for CHU2CORE.
 
 Uses ``urllib.request`` from the standard library so the client adds no
 dependency beyond Flask and PyWebView. Every failure is translated into a
