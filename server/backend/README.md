@@ -1,4 +1,4 @@
-# Portable Applications Server — Python Backend
+# CHU2CORE — Python Backend
 
 Desktop shell (PyWebView) + HTTP API (Flask) + SQLite catalog + ZIP distribution.
 
@@ -188,7 +188,7 @@ The server answers client auto-discovery with a UDP responder on port 8758
 `b"PORTABLE_APPS_DISCOVER_V1"` to `255.255.255.255:8758`; the server replies with:
 
 ```json
-{"app": "Portable Applications Server", "version": "0.1.0", "port": 8756}
+{"app": "CHU2CORE", "version": "0.1.0", "port": 8756}
 ```
 
 `port` must remain a JSON integer — the client validates it with `isinstance(port, int)` and
@@ -207,7 +207,7 @@ build.bat
 ```
 
 `build.bat` runs `npm run build` and then PyInstaller against `pyinstaller.spec` at the
-project root. The spec produces an **onedir** bundle in `release\PortableApplicationsServer\`:
+project root. The spec produces an **onedir** bundle in `release\CHU2CORE`:
 
 | Bundled as | Destination in the bundle | Read by |
 |---|---|---|
@@ -219,7 +219,7 @@ executable answers 500 with `TemplateNotFound`.
 
 The executable reads bundled resources from `sys._MEIPASS` and writes its `data/` folder
 next to itself (`paths.base_dir()` returns the executable's directory when frozen), keeping
-the build portable. To verify a build, copy `release\PortableApplicationsServer\` to another
+the build portable. To verify a build, copy `release\CHU2CORE\` to another
 folder, run the exe, and confirm a fresh `data\catalog.db` appears beside it.
 
 The build is windowed (`console=False`), so startup errors are not printed to a console. If
