@@ -141,7 +141,7 @@ export function SettingsView({
             <div>
               <h2 className="card-title text-sm">Server connection</h2>
               <p className="mt-1 text-xs text-base-content/60">
-                Point the client at the computer hosting the Portable Applications Server.
+                Point the client at the computer hosting CHU2CORE.
               </p>
             </div>
             <span className={`badge ${status.badge} badge-sm gap-1`}>
