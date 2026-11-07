@@ -1,5 +1,5 @@
 import type { ViewId } from "../../types"
-import { MoonIcon, SearchIcon, SunIcon } from "../icons"
+import { MoonIcon, SunIcon } from "../icons"
 
 interface TopBarProps {
   title: string
@@ -18,11 +18,6 @@ export function TopBar({ title, subtitle, lanIp, port, onNavigate }: TopBarProps
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <label className="input input-sm hidden w-64 md:flex">
-          <SearchIcon width={16} height={16} className="opacity-50" />
-          <input type="search" placeholder="Search catalog…" />
-        </label>
-
         <button
           type="button"
           className="btn btn-sm btn-ghost gap-2 font-mono text-xs"
@@ -37,12 +32,6 @@ export function TopBar({ title, subtitle, lanIp, port, onNavigate }: TopBarProps
           <SunIcon className="swap-off" width={18} height={18} />
           <MoonIcon className="swap-on" width={18} height={18} />
         </label>
-
-        <div className="avatar avatar-placeholder">
-          <div className="w-8 rounded-full bg-neutral text-neutral-content">
-            <span className="text-xs">AD</span>
-          </div>
-        </div>
       </div>
     </header>
   )
