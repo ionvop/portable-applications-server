@@ -1,8 +1,8 @@
-"""Static configuration values for the Portable Applications Server."""
+"""Static configuration values for CHU2CORE."""
 
 from __future__ import annotations
 
-APP_NAME = "Portable Applications Server"
+APP_NAME = "CHU2CORE"
 VERSION = "0.1.0"
 
 # The WSGI server binds to every interface so client computers on the local
@@ -24,6 +24,11 @@ DB_FILE_NAME = "catalog.db"
 
 # Location of the built frontend, relative to the resource root.
 WEB_DIR_NAME = "dist"
+
+# Window and executable icon, relative to the resource root. Bundled by
+# ``pyinstaller.spec`` and passed to ``webview.start(icon=...)``.
+RESOURCES_DIR_NAME = "resources"
+ICON_FILE_NAME = "app.ico"
 
 # Streaming chunk size used when reading source files into the archive stream.
 # This bounds the memory used per transfer regardless of file size.
