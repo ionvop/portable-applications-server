@@ -3,7 +3,6 @@ import { describeConnection } from "../../lib/connection"
 import {
   CatalogIcon,
   DownloadsIcon,
-  GamepadIcon,
   LibraryIcon,
   MoonIcon,
   SettingsIcon,
@@ -46,11 +45,9 @@ export function NavBar({
           onClick={() => onNavigate("catalog")}
           aria-label="Go to the catalog"
         >
-          <div className="grid size-10 place-items-center rounded-box bg-primary text-primary-content">
-            <GamepadIcon width={22} height={22} />
-          </div>
+          <img src="/logo.svg" alt="" className="size-10 shrink-0" />
           <div className="text-left">
-            <p className="text-sm font-semibold leading-tight">Portable Apps</p>
+            <p className="text-sm font-semibold leading-tight">CHU2PLAY</p>
             <p className="text-xs leading-tight text-base-content/60">Client</p>
           </div>
         </button>
