@@ -266,7 +266,7 @@ export function EntryDetailView({
 
       <form id="entry-form" onSubmit={handleSubmit} noValidate>
         <div className="grid gap-5 lg:grid-cols-3">
-          <div className="card border border-base-300 bg-base-200 lg:col-span-2">
+          <div className="card border border-base-300 surface lg:col-span-2">
             <div className="card-body gap-5">
               <h2 className="card-title text-base">Entry details</h2>
 
@@ -439,7 +439,7 @@ export function EntryDetailView({
           </div>
 
         <div className="flex flex-col gap-5">
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Preview</h2>
               <div className="overflow-hidden rounded-box border border-base-300">
@@ -448,7 +448,7 @@ export function EntryDetailView({
                   srcOverride={pendingPreview}
                   className="h-36 w-full"
                 />
-                <div className="bg-base-100 p-3">
+                <div className="bg-base-100/60 p-3">
                   <p className="text-sm font-semibold">{previewEntry.title}</p>
                   <p className="mt-1 line-clamp-3 text-xs text-base-content/60">
                     {previewEntry.description || "No description yet."}
@@ -461,7 +461,7 @@ export function EntryDetailView({
             </div>
           </div>
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Metadata</h2>
               <dl className="flex flex-col gap-2 text-xs">
