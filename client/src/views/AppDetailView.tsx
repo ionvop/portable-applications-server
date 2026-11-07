@@ -122,7 +122,7 @@ export function AppDetailView({
         <div className="flex flex-col gap-5 lg:col-span-2">
           <Cover app={app} large className="h-56 w-full rounded-box" />
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -183,7 +183,7 @@ export function AppDetailView({
               </div>
 
               {job && (
-                <div className="rounded-field bg-base-100 px-3 py-3">
+                <div className="rounded-field bg-base-100/60 px-3 py-3">
                   <JobProgress job={job} />
                 </div>
               )}
@@ -203,7 +203,7 @@ export function AppDetailView({
         </div>
 
         <div className="flex flex-col gap-5">
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h3 className="card-title text-sm">Details</h3>
               <dl className="flex flex-col gap-2 text-xs">
@@ -229,19 +229,19 @@ export function AppDetailView({
             </div>
           </div>
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h3 className="card-title text-sm">Local install</h3>
               <p className="text-xs text-base-content/60">
                 Files are extracted into the client's managed storage directory.
               </p>
-              <div className="rounded-field bg-base-100 px-3 py-2">
+              <div className="rounded-field bg-base-100/60 px-3 py-2">
                 <p className="text-xs text-base-content/40">Executable</p>
                 <p className="truncate font-mono text-xs" title={install?.executable}>
                   {install?.executable || "—"}
                 </p>
               </div>
-              <div className="rounded-field bg-base-100 px-3 py-2">
+              <div className="rounded-field bg-base-100/60 px-3 py-2">
                 <p className="text-xs text-base-content/40">Directory</p>
                 <p className="truncate font-mono text-xs" title={install?.directory}>
                   {install?.directory || "—"}
