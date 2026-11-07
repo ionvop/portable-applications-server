@@ -1,5 +1,5 @@
 @echo off
-REM Build the portable Windows bundle into release\PortableApplicationsServer\.
+REM Build the portable Windows bundle into release\CHU2CORE\.
 REM Requires the .venv from the README setup steps and Node.js for the frontend.
 
 setlocal
@@ -34,7 +34,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [build] Done: release\PortableApplicationsServer\PortableApplicationsServer.exe
+echo [build] Done: release\CHU2CORE\CHU2CORE.exe
 echo [build] Copy that folder anywhere; data\ is created beside the exe on first run.
 
 endlocal
