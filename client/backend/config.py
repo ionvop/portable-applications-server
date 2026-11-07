@@ -1,8 +1,8 @@
-"""Static configuration values for the Portable Applications Client."""
+"""Static configuration values for CHU2PLAY."""
 
 from __future__ import annotations
 
-APP_NAME = "Portable Applications Client"
+APP_NAME = "CHU2PLAY"
 VERSION = "0.1.0"
 
 # The local Flask app only ever serves this machine, so it binds to loopback.
@@ -13,7 +13,7 @@ UI_HOST = "127.0.0.1"
 # on the same machine during development without a port clash.
 PORT = 8757
 
-# Default port of the Portable Applications Server on the LAN. Discovery may
+# Default port of CHU2CORE on the LAN. Discovery may
 # report a different one; this is only the fallback used when probing.
 SERVER_PORT = 8756
 
@@ -53,7 +53,7 @@ SETTINGS_FILE_NAME = "settings.json"
 LOG_FILE_NAME = "client.log"
 LOG_MAX_BYTES = 1024 * 1024
 
-# Report written by ``PortableApplicationsClient.exe --selftest``. The build
+# Report written by ``CHU2PLAY.exe --selftest``. The build
 # script reads it to prove the frozen bundle serves the frontend and can write
 # its data folder.
 SELFTEST_LOG_FILE_NAME = "selftest.log"
@@ -64,6 +64,11 @@ MAX_THUMBNAIL_BYTES = 5 * 1024 * 1024
 
 # Location of the built frontend, relative to the resource root.
 WEB_DIR_NAME = "dist"
+
+# Window and executable icon, relative to the resource root. Bundled by
+# ``pyinstaller.spec`` and passed to ``webview.start(icon=...)``.
+RESOURCES_DIR_NAME = "resources"
+ICON_FILE_NAME = "app.ico"
 
 # Streaming chunk size used while downloading and extracting archives. Bounds
 # memory to one chunk regardless of the archive size.
