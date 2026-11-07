@@ -363,10 +363,10 @@ Two cautions:
 ## Remaining manual check
 
 Everything automated is green. One thing cannot be automated because it needs a real
-Portable Applications Server on the LAN:
+CHU2CORE on the LAN:
 
-1. Copy `release\PortableApplicationsClient` to a clean machine (or a fresh folder).
-2. Run `PortableApplicationsClient.exe` — the window opens and `data\` appears beside it.
+1. Copy `release\CHU2PLAY` to a clean machine (or a fresh folder).
+2. Run `CHU2PLAY.exe` — the window opens and `data\` appears beside it.
 3. Set the server address in Settings (or use **Discover on LAN**).
 4. Install an application, watch the progress bar, then **Play** it.
 5. Confirm the game keeps running after the client window is closed.
