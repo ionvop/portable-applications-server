@@ -5,10 +5,7 @@ import { DownloadIcon, GridIcon, ListIcon, PlayIcon, SearchIcon } from "../compo
 
 interface CatalogViewProps {
   apps: CatalogApp[]
-  /**
-   * The search text. Owned by `App` because the navbar search box edits the
-   * same query, so the two inputs stay in sync.
-   */
+  /** The search text. Owned by `App` so it survives view switches. */
   query: string
   onQueryChange: (query: string) => void
   onOpenApp: (app: CatalogApp) => void
