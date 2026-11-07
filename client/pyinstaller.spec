@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller build definition for the Portable Applications Client.
+"""PyInstaller build definition for CHU2PLAY.
 
 Build with ``build.bat`` (or ``pyinstaller --noconfirm pyinstaller.spec``).
 
-Layout produced in ``release/PortableApplicationsClient/``::
+Layout produced in ``release/CHU2PLAY/``::
 
-    PortableApplicationsClient.exe
+    CHU2PLAY.exe
     _internal/
         dist/                     <- built frontend (paths.web_dir())
         ...                       <- Python runtime and dependencies
@@ -26,8 +26,8 @@ Two rules keep the build portable:
 The build is *onedir*: the executable starts instantly and the bundled files can
 be inspected, at the cost of shipping a folder instead of a single file.
 
-``build.bat`` verifies the result by running ``PortableApplicationsClient.exe
---selftest`` in place and again from a copy in ``%TEMP%``; the exe is windowed,
+``build.bat`` verifies the result by running ``CHU2PLAY.exe --selftest`` in
+place and again from a copy in ``%TEMP%``; the exe is windowed,
 so the verdict travels in the exit code and in ``data/selftest.log``.
 """
 
@@ -43,6 +43,8 @@ project_root = Path(SPECPATH).resolve()
 #: ``config.WEB_DIR_NAME`` ("dist") to the resource root.
 datas = [
     (str(project_root / "dist"), "dist"),
+    # Window icon, read through ``paths.icon_path()``.
+    (str(project_root / "resources" / "app.ico"), "resources"),
 ]
 
 # pywebview imports its platform backend dynamically, so static analysis misses
@@ -88,13 +90,14 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="PortableApplicationsClient",
+    name="CHU2PLAY",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     # Windowed build: the app is a desktop window, not a console program.
     console=False,
+    icon=str(project_root / "resources" / "app.ico"),
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -109,5 +112,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="PortableApplicationsClient",
+    name="CHU2PLAY",
 )
