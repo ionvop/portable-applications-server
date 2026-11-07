@@ -135,7 +135,7 @@ export function SettingsView({
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-4">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -229,7 +229,7 @@ export function SettingsView({
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <div className="card border border-base-300 bg-base-200">
+        <div className="card border border-base-300 surface">
           <div className="card-body gap-3">
             <h2 className="card-title text-sm">Client</h2>
             <dl className="flex flex-col gap-2 text-xs">
@@ -255,17 +255,17 @@ export function SettingsView({
           </div>
         </div>
 
-        <div className="card border border-base-300 bg-base-200">
+        <div className="card border border-base-300 surface">
           <div className="card-body gap-3">
             <h2 className="card-title text-sm">Storage</h2>
             <p className="text-xs text-base-content/60">
               Paths are resolved relative to the client's own folder, so the app stays portable.
             </p>
-            <div className="rounded-field bg-base-100 px-3 py-2">
+            <div className="rounded-field bg-base-100/60 px-3 py-2">
               <p className="text-xs text-base-content/40">Data directory</p>
               <p className="truncate font-mono text-xs">{system.data_dir}</p>
             </div>
-            <div className="rounded-field bg-base-100 px-3 py-2">
+            <div className="rounded-field bg-base-100/60 px-3 py-2">
               <p className="text-xs text-base-content/40">Applications directory</p>
               <p className="truncate font-mono text-xs">{system.apps_dir}</p>
             </div>
@@ -278,7 +278,7 @@ export function SettingsView({
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-3">
           <h2 className="card-title text-sm">Appearance</h2>
           <div className="flex flex-wrap items-center gap-3">
@@ -299,7 +299,7 @@ export function SettingsView({
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <ServerIcon width={18} height={18} className="text-base-content/50" />
