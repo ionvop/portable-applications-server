@@ -1,4 +1,4 @@
-"""End-to-end contract test against a real Portable Applications Server.
+"""End-to-end contract test against a real CHU2CORE.
 
 ``smoke_test.py`` proves the client works against a *stub* that implements the
 server contract. That is fast and hermetic, but it cannot catch a contract
@@ -46,7 +46,7 @@ SERVER_DIR = os.environ.get("PAS_SERVER_DIR", "").strip()
 pytestmark = pytest.mark.skipif(
     not SERVER_DIR or not (Path(SERVER_DIR) / "backend" / "app.py").is_file(),
     reason=(
-        "Set PAS_SERVER_DIR to the Portable Applications Server checkout to run "
+        "Set PAS_SERVER_DIR to the CHU2CORE checkout to run "
         "the cross-repo contract test (e.g. PAS_SERVER_DIR=../server)."
     ),
 )
