@@ -56,6 +56,12 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
     return False
 
 
+def _window_icon() -> str | None:
+    """Path to the bundled icon, or ``None`` when running without one."""
+    icon = paths.icon_path()
+    return str(icon) if icon.is_file() else None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
 
@@ -142,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
         min_size=(960, 640),
     )
     try:
-        webview.start()
+        webview.start(icon=_window_icon())
     finally:
         server.shutdown()
         server.join(timeout=5)
