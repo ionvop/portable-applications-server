@@ -177,7 +177,7 @@ export function FilesView() {
       )}
 
       <div className="grid gap-5 lg:grid-cols-3">
-        <div className="card border border-base-300 bg-base-200 lg:col-span-2">
+        <div className="card border border-base-300 surface lg:col-span-2">
           <div className="card-body gap-4">
             <div className="flex items-center justify-between">
               <h2 className="card-title text-base">
@@ -245,7 +245,7 @@ export function FilesView() {
         </div>
 
         <div className="flex flex-col gap-5">
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Folder actions</h2>
               <p className="text-xs text-base-content/60">
@@ -280,7 +280,7 @@ export function FilesView() {
             </div>
           </div>
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Storage</h2>
 
