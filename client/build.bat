@@ -1,5 +1,5 @@
 @echo off
-REM Build the portable Windows bundle into release\PortableApplicationsClient\.
+REM Build the portable Windows bundle into release\CHU2PLAY\.
 REM Requires the .venv from the README setup steps and Node.js for the frontend.
 REM
 REM The build is verified before it is declared done: the frozen exe runs its own
@@ -11,8 +11,8 @@ setlocal
 
 cd /d "%~dp0"
 
-set "BUNDLE=release\PortableApplicationsClient"
-set "EXE=%BUNDLE%\PortableApplicationsClient.exe"
+set "BUNDLE=release\CHU2PLAY"
+set "EXE=%BUNDLE%\CHU2PLAY.exe"
 
 if not exist ".venv\Scripts\python.exe" (
     echo [build] .venv not found. Run the setup steps in README.md first.
@@ -72,7 +72,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-call :selftest "%COPY%\PortableApplicationsClient.exe" "%TEMP%\pac-selftest-copy.log"
+call :selftest "%COPY%\CHU2PLAY.exe" "%TEMP%\pac-selftest-copy.log"
 if errorlevel 1 (
     echo [build] The copied bundle failed its selftest.
     rmdir /s /q "%COPY%"
