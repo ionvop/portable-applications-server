@@ -52,6 +52,12 @@ def _wait_for_port(host: str, port: int, timeout: float = 10.0) -> bool:
     return False
 
 
+def _window_icon() -> str | None:
+    """Path to the bundled icon, or ``None`` when running without one."""
+    icon = paths.icon_path()
+    return str(icon) if icon.is_file() else None
+
+
 def main() -> int:
     db.init_db()
     archive_service.sweep_stale_archives()
@@ -100,7 +106,7 @@ def main() -> int:
     window.events.closing += guard.on_closing
     guard.start(window)
     try:
-        webview.start()
+        webview.start(icon=_window_icon())
     finally:
         guard.stop()
         discovery.stop()
