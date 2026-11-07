@@ -10,7 +10,6 @@ import {
 interface SidebarProps {
   activeView: ViewId
   onNavigate: (view: ViewId) => void
-  version: string
 }
 
 const navItems: { id: ViewId; label: string; icon: typeof DashboardIcon }[] = [
@@ -20,7 +19,7 @@ const navItems: { id: ViewId; label: string; icon: typeof DashboardIcon }[] = [
   { id: "transfers", label: "Transfers", icon: TransfersIcon },
 ]
 
-export function Sidebar({ activeView, onNavigate, version }: SidebarProps) {
+export function Sidebar({ activeView, onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-base-300 bg-base-200">
       <div className="flex items-center gap-3 px-5 py-5">
@@ -70,9 +69,6 @@ export function Sidebar({ activeView, onNavigate, version }: SidebarProps) {
             LAN distribution active
           </p>
         </div>
-        <p className="mt-3 px-1 text-xs text-base-content/40">
-          Version {version}
-        </p>
       </div>
     </aside>
   )
