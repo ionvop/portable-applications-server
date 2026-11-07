@@ -1,6 +1,6 @@
 # Portable Applications Server
 
-Portable Applications Server is a Windows-oriented application distribution system for a local network. It contains two desktop applications: a server for maintaining a catalog of portable applications and games, and a client for browsing, downloading, updating, and launching them.
+Portable Applications Server is a Windows-oriented application distribution system for a local network. It contains two desktop applications: **CHU2CORE**, a server for maintaining a catalog of portable applications and games, and **CHU2PLAY**, a client for browsing, downloading, updating, and launching them.
 
 The server stores and publishes catalog entries over the LAN. Each client downloads the selected application when needed, extracts it into local storage, and launches it using the configured executable path. The server and client are separate projects with their own dependencies, runtime data, and build outputs.
 
