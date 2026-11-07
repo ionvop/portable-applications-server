@@ -5,7 +5,7 @@ export type ViewId = "catalog" | "app" | "library" | "downloads" | "settings"
 export type ThemeId = "night" | "light"
 
 /**
- * How the client currently stands with the Portable Applications Server.
+ * How the client currently stands with CHU2CORE.
  *
  * Derived from local state rather than probed: `unconfigured` means no address
  * is stored, `unreachable` means the catalog request failed, and `connected`
