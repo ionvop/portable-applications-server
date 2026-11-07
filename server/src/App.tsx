@@ -255,7 +255,6 @@ function App() {
       subtitle={meta.subtitle}
       lanIp={systemInfo?.lan_ip ?? "—"}
       port={systemInfo?.port ?? 0}
-      version={systemInfo?.version ?? ""}
       onNavigate={navigate}
     >
       {error && (
