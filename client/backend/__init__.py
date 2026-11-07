@@ -1,4 +1,4 @@
-"""Portable Applications Client — Python desktop backend.
+"""CHU2PLAY — Python desktop backend.
 
 The package hosts the PyWebView desktop shell, the local Flask API that serves
 the built React frontend, and the services that talk to the Portable
