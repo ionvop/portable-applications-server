@@ -49,7 +49,7 @@ export function CloseGuard() {
     <ConfirmDialog
       open={open}
       title="Stop the server?"
-      message="Closing this window stops the Portable Applications Server. Client computers will no longer be able to browse the catalog or download applications."
+      message="Closing this window stops CHU2CORE. Client computers will no longer be able to browse the catalog or download applications."
       confirmLabel="Stop server and exit"
       onConfirm={handleConfirm}
       onCancel={handleCancel}
