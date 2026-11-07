@@ -81,11 +81,7 @@ function App() {
   const [installs, setInstalls] = useState<Install[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
-  /**
-   * The Catalog's search text. It lives here rather than in `CatalogView`
-   * because the navbar search edits the same query, so the two inputs cannot
-   * disagree about what is being filtered.
-   */
+  /** The Catalog's search text, kept here so it survives view switches. */
   const [catalogQuery, setCatalogQuery] = useState("")
 
   const [loading, setLoading] = useState(true)
@@ -524,16 +520,6 @@ function App() {
     setView(next)
   }
 
-  /**
-   * The navbar search and the Catalog's search are one query. Typing in the
-   * navbar jumps to the Catalog so the results are actually visible; clearing it
-   * leaves the user where they are.
-   */
-  const handleCatalogQueryChange = (next: string) => {
-    setCatalogQuery(next)
-    if (next.trim() && view !== "catalog") navigate("catalog")
-  }
-
   const openApp = (app: CatalogApp) => {
     setSelectedApp(app)
     setView("app")
@@ -595,15 +581,12 @@ function App() {
       activeView={view}
       connection={connection}
       serverUrl={system.server_url}
-      version={system.version}
       theme={theme}
-      query={catalogQuery}
       error={actionError}
       onDismissError={() => setActionError(null)}
       onRetryError={retry}
       onNavigate={navigate}
       onToggleTheme={toggleTheme}
-      onQueryChange={handleCatalogQueryChange}
     >
       {view !== "app" && (
         <header className="mb-5">
@@ -627,7 +610,7 @@ function App() {
           <CatalogView
             apps={catalog}
             query={catalogQuery}
-            onQueryChange={handleCatalogQueryChange}
+            onQueryChange={setCatalogQuery}
             onOpenApp={openApp}
           />
         ))}
