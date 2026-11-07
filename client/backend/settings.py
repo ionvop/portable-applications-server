@@ -16,7 +16,7 @@ from . import paths
 
 #: Keys the settings file may contain, with their defaults.
 DEFAULTS: dict[str, Any] = {
-    # Base URL of the Portable Applications Server, e.g. "http://192.168.1.10:8756".
+    # Base URL of CHU2CORE, e.g. "http://192.168.1.10:8756".
     "server_url": "",
     # ISO timestamp of the last successful discovery, for display only.
     "discovered_at": "",
