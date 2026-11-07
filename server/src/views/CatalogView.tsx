@@ -135,7 +135,7 @@ export function CatalogView({
       </div>
 
       {visible.length === 0 ? (
-        <div className="card border border-dashed border-base-300 bg-base-200">
+        <div className="card border border-dashed border-base-300 surface">
           <div className="card-body items-center py-16 text-center">
             <p className="text-sm font-medium">No entries match your search</p>
             <p className="text-xs text-base-content/60">
@@ -148,7 +148,7 @@ export function CatalogView({
           {visible.map((entry) => (
             <div
               key={entry.id}
-              className="card relative border border-base-300 bg-base-200 transition-colors hover:border-primary/60"
+              className="card relative border border-base-300 surface transition-colors hover:border-primary/60"
             >
               <button
                 type="button"
@@ -191,7 +191,7 @@ export function CatalogView({
           ))}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <div className="overflow-x-auto rounded-box border border-base-300 surface">
           <table className="table table-sm">
             <thead>
               <tr>
