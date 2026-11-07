@@ -557,7 +557,7 @@ function App() {
 
   if (systemError) {
     return (
-      <div className="grid h-full place-items-center bg-base-100 p-6 text-base-content">
+      <div className="grid h-full place-items-center p-6 text-base-content">
         <ErrorNotice
           className="w-full max-w-md"
           title="The client backend is unreachable"
@@ -570,7 +570,7 @@ function App() {
 
   if (!system) {
     return (
-      <div className="grid h-full place-items-center bg-base-100 text-base-content">
+      <div className="grid h-full place-items-center text-base-content">
         <span className="loading loading-spinner loading-lg" aria-label="Loading" />
       </div>
     )
