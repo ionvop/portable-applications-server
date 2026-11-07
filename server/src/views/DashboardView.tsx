@@ -80,7 +80,7 @@ export function DashboardView({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div className="stats stats-vertical w-full border border-base-300 bg-base-200 shadow-sm sm:stats-horizontal">
+      <div className="stats stats-vertical w-full border border-base-300 surface shadow-sm sm:stats-horizontal">
         <div className="stat">
           <div className="stat-title">Catalog entries</div>
           <div className="stat-value text-2xl">{system.entry_count}</div>
@@ -108,7 +108,7 @@ export function DashboardView({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="card border border-base-300 bg-base-200 lg:col-span-2">
+        <div className="card border border-base-300 surface lg:col-span-2">
           <div className="card-body gap-4">
             <div className="flex items-center justify-between">
               <h2 className="card-title text-base">Recent catalog entries</h2>
@@ -153,7 +153,7 @@ export function DashboardView({
         </div>
 
         <div className="flex flex-col gap-6">
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">
                 <ServerIcon width={18} height={18} />
@@ -184,7 +184,7 @@ export function DashboardView({
             </div>
           </div>
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">
                 <LinkIcon width={18} height={18} />
@@ -221,7 +221,7 @@ export function DashboardView({
             </div>
           </div>
 
-          <div className="card border border-base-300 bg-base-200">
+          <div className="card border border-base-300 surface">
             <div className="card-body gap-3">
               <h2 className="card-title text-base">Quick actions</h2>
               <div className="flex flex-col gap-2">
@@ -256,7 +256,7 @@ export function DashboardView({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="card border border-base-300 bg-base-200">
+        <div className="card border border-base-300 surface">
           <div className="card-body gap-4">
             <div className="flex items-center justify-between">
               <h2 className="card-title text-base">Active transfers</h2>
@@ -310,7 +310,7 @@ export function DashboardView({
           </div>
         </div>
 
-        <div className="card border border-base-300 bg-base-200">
+        <div className="card border border-base-300 surface">
           <div className="card-body gap-4">
             <h2 className="card-title text-base">Recent activity</h2>
             <ul className="flex flex-col gap-3">
