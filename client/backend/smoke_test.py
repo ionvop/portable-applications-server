@@ -307,7 +307,7 @@ def main() -> int:
         original_discover = discovery_service.discover
         discovered = {
             "server_url": "http://192.168.254.106:8756",
-            "app": "Portable Applications Server",
+            "app": "CHU2CORE",
             "version": "0.1.0",
             "host": "192.168.254.106",
         }
@@ -388,7 +388,7 @@ def main() -> int:
         original_check_health = server_client.check_health
         discovered = {
             "server_url": "http://192.168.254.106:8756",
-            "app": "Portable Applications Server",
+            "app": "CHU2CORE",
             "version": "0.1.0",
             "host": "192.168.254.106",
         }
