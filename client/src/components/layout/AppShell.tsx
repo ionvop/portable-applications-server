@@ -37,7 +37,9 @@ export function AppShell({
   const status = describeConnection(connection)
 
   return (
-    <div className="flex h-full flex-col bg-base-100 text-base-content">
+    // No `bg-base-100` here: the body paints the solid colour and the fixed
+    // character backdrop sits between it and this shell.
+    <div className="flex h-full flex-col text-base-content">
       <NavBar
         activeView={activeView}
         connection={connection}
