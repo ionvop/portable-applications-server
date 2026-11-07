@@ -46,7 +46,7 @@ export function TransfersView({ transfers }: TransfersViewProps) {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
-      <div className="stats stats-vertical w-full border border-base-300 bg-base-200 shadow-sm sm:stats-horizontal">
+      <div className="stats stats-vertical w-full border border-base-300 surface shadow-sm sm:stats-horizontal">
         <div className="stat">
           <div className="stat-title">Active</div>
           <div className="stat-value text-2xl">{active.length}</div>
@@ -71,7 +71,7 @@ export function TransfersView({ transfers }: TransfersViewProps) {
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-4">
           <h2 className="card-title text-base">Active transfers</h2>
           {active.length === 0 ? (
@@ -124,7 +124,7 @@ export function TransfersView({ transfers }: TransfersViewProps) {
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-4">
           <h2 className="card-title text-base">Transfer history</h2>
           {history.length === 0 ? (
