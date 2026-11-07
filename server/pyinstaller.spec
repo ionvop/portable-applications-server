@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller build definition for the Portable Applications Server.
+"""PyInstaller build definition for CHU2CORE.
 
 Build with ``build.bat`` (or ``pyinstaller --noconfirm pyinstaller.spec``).
 
-Layout produced in ``release/PortableApplicationsServer/``::
+Layout produced in ``release/CHU2CORE/``::
 
-    PortableApplicationsServer.exe
+    CHU2CORE.exe
     _internal/
         dist/                     <- built frontend (paths.web_dir())
         backend/templates/        <- Jinja templates for /client
@@ -36,6 +36,8 @@ project_root = Path(SPECPATH).resolve()
 datas = [
     (str(project_root / "dist"), "dist"),
     (str(project_root / "backend" / "templates"), "backend/templates"),
+    # Window icon, read through ``paths.icon_path()``.
+    (str(project_root / "resources" / "app.ico"), "resources"),
 ]
 
 # pywebview imports its platform backend dynamically, so static analysis misses
@@ -77,13 +79,14 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="PortableApplicationsServer",
+    name="CHU2CORE",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
     # Windowed build: the app is a desktop window, not a console program.
     console=False,
+    icon=str(project_root / "resources" / "app.ico"),
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -98,5 +101,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="PortableApplicationsServer",
+    name="CHU2CORE",
 )
