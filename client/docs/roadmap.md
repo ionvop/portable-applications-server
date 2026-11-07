@@ -209,8 +209,9 @@ This is the step that makes the app feel real.
   **Done in Step 6** — `App.tsx` polls only while a job is active and refreshes `installs` +
   `catalog` when one finishes.
 - ~~Refetch on window focus.~~ **Done** — see below.
-- ~~Either wire the `NavBar` search box to the catalog query or remove it.~~ **Wired** — the
-  navbar box and `CatalogView`'s box now edit one shared query.
+- ~~Either wire the `NavBar` search box to the catalog query or remove it.~~ **Wired, then
+  removed** — the navbar box and `CatalogView`'s box briefly edited one shared query; the navbar
+  box was later dropped as redundant, leaving only the in-page filter.
 
 **Done when:** the Library updates without a manual reload.
 
@@ -232,11 +233,12 @@ This is the step that makes the app feel real.
 - A focus event while `systemError` is set calls `retry()` instead of `refreshOnFocus()`, so a
   backend that came back while the window was in the background recovers on its own — the
   full-screen error card is the one thing a partial refresh could not clear.
-- **The search box is wired, not removed.** `catalogQuery` moved up to `App.tsx` and is threaded
-  through `AppShell` → `NavBar`; `CatalogView` lost its internal `query` state and takes
-  `query`/`onQueryChange` props. Typing in the navbar navigates to the Store when the value is
-  non-empty (so the results are visible) and leaves the user where they are when it is cleared.
-  `layout` and `filter` stay local to `CatalogView` — they are view preferences, not shared state.
+- **The search box was wired, then removed.** `catalogQuery` moved up to `App.tsx` and was
+  threaded through `AppShell` → `NavBar`; `CatalogView` lost its internal `query` state and takes
+  `query`/`onQueryChange` props. The navbar box was later deleted as redundant (it duplicated the
+  in-page filter), so `AppShell`/`NavBar` no longer take `query`/`onQueryChange` and `App` passes
+  `setCatalogQuery` straight to `CatalogView`. `layout` and `filter` stay local to `CatalogView` —
+  they are view preferences, not shared state.
 - `npm run build` and `npm run lint` clean.
 
 ### Step 10 — Hardening ✅
