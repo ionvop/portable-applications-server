@@ -1,7 +1,7 @@
-# Portable Applications Client
+# CHU2PLAY
 
 Desktop client for browsing, downloading and launching portable applications and games
-distributed by a Portable Applications Server on the local network.
+distributed by CHU2CORE on the local network.
 
 React + TypeScript + Vite + Tailwind CSS + DaisyUI frontend, Flask + SQLite backend,
 PyWebView desktop shell, packaged with PyInstaller.
@@ -58,7 +58,7 @@ npm run lint
 npm run build
 ```
 
-The smoke test starts a stub Portable Applications Server on loopback, so the full
+The smoke test starts a stub CHU2CORE on loopback, so the full
 catalog → download → extract → launch path is exercised without a real server. It covers
 every endpoint, including the failure paths (dead server, missing manifest, non-image
 thumbnail, missing executable, refused reset), a chunked download with no `Content-Length`,
@@ -108,13 +108,13 @@ That runs `npm run build` and then PyInstaller against [`pyinstaller.spec`](pyin
 producing:
 
 ```
-release\PortableApplicationsClient\
-    PortableApplicationsClient.exe
+release\CHU2PLAY\
+    CHU2PLAY.exe
     _internal\        # Python runtime and dist\ frontend
     data\             # created on first run
 ```
 
-Copy the whole `release\PortableApplicationsClient` folder to another machine and run the
+Copy the whole `release\CHU2PLAY` folder to another machine and run the
 executable — no Python or Node.js install is required. The `data\` folder (install state,
 downloaded applications, settings, log) is always created **beside the exe**, never inside
 the bundle, so the folder stays self-contained and can be moved or backed up as a unit.
@@ -126,7 +126,7 @@ the bundle, so the folder stays self-contained and can be moved or backed up as 
 `build.bat` does not declare success until the bundle proves itself. After PyInstaller it:
 
 1. deletes any `release\` left by a previous run, so a stale `data\` can never ship;
-2. runs `PortableApplicationsClient.exe --selftest`, which checks from *inside* the frozen
+2. runs `CHU2PLAY.exe --selftest`, which checks from *inside* the frozen
    process that the frontend is served out of `_internal\dist`, that `data\` is created
    beside the exe (not inside the bundle), that the database opens, that every read-only
    endpoint answers, and that a real socket can be bound;
@@ -138,7 +138,7 @@ The exe is windowed, so the verdict travels in the exit code and in a report fil
 check by hand at any time:
 
 ```powershell
-release\PortableApplicationsClient\PortableApplicationsClient.exe --selftest --selftest-log selftest.log
+release\CHU2PLAY\CHU2PLAY.exe --selftest --selftest-log selftest.log
 ```
 
 Reports from the build are written to `%TEMP%\pac-selftest.log` and
