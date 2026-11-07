@@ -1,10 +1,10 @@
-# Portable Applications Client — Python Backend
+# CHU2PLAY — Python Backend
 
 Desktop shell (PyWebView) + local HTTP API (Flask) + install state (SQLite) + LAN
 download/extract/launch services.
 
-The client is the user-facing half of the Portable Applications system. It discovers the
-Portable Applications Server on the local network, lists its catalog, downloads and extracts
+The client is the user-facing half of the Portable Applications Server system. It discovers
+CHU2CORE on the local network, lists its catalog, downloads and extracts
 the selected application, and launches it — all from a single window.
 
 ## Requirements
@@ -61,7 +61,7 @@ curl http://localhost:5173/api/health   # {"status":"ok"}
 
 `backend/dev_server.py` skips the PyWebView window and the `dist/` existence check, so no
 build is needed while iterating. Run `python backend/smoke_test.py` to check the API
-baseline without starting a server or a real Portable Applications Server — it spins up a
+baseline without starting a server or a real CHU2CORE — it spins up a
 stub server on loopback that implements the contract below.
 
 `python -m pytest` runs the same suite through a wrapper in `backend/tests/` that redirects
@@ -208,7 +208,7 @@ progress bar: `reconcile_stale_jobs()` marks any leftover running row `failed` o
 
 ## Server contract required
 
-The client assumes the following endpoints on the Portable Applications Server. All four are
+The client assumes the following endpoints on CHU2CORE. All four are
 implemented in `../server`.
 
 | Method | Path | Status |
@@ -284,7 +284,7 @@ build.bat
 ```
 
 `build.bat` runs `npm run build` and then PyInstaller against `pyinstaller.spec` at the
-project root. The spec produces an **onedir** bundle in `release\PortableApplicationsClient\`:
+project root. The spec produces an **onedir** bundle in `release\CHU2PLAY`:
 
 | Bundled as | Destination in the bundle | Read by |
 |---|---|---|
