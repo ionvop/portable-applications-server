@@ -9,6 +9,44 @@ body,
   height: 100%;
 }
 
+/*
+ * Decorative character backdrop.
+ *
+ * The image is painted by a fixed pseudo-element rather than on `body` itself,
+ * so `opacity` fades the artwork only and leaves the solid `base-100` colour
+ * underneath untouched. It is anchored to the bottom-right corner and never
+ * scrolls with the content.
+ *
+ * Opacity is a variable so each daisyUI theme can pick its own value: the
+ * artwork needs a little more presence against the light background.
+ */
+:root {
+  --app-backdrop-opacity: 0.15;
+}
+
+[data-theme="light"] {
+  --app-backdrop-opacity: 0.2;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-image: url("./assets/bg.webp");
+  background-repeat: no-repeat;
+  background-position: bottom right;
+  background-size: auto 90%;
+  opacity: var(--app-backdrop-opacity);
+  pointer-events: none;
+}
+
+/* Keep the app above the backdrop. */
+#root {
+  position: relative;
+  z-index: 1;
+}
+
 body {
   margin: 0;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
