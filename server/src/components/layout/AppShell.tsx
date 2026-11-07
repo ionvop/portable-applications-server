@@ -25,7 +25,9 @@ export function AppShell({
   children,
 }: AppShellProps) {
   return (
-    <div className="flex h-full bg-base-100 text-base-content">
+    // No `bg-base-100` here: the body paints the solid colour and the fixed
+    // character backdrop sits between it and this shell.
+    <div className="flex h-full text-base-content">
       <Sidebar activeView={activeView} onNavigate={onNavigate} />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar
