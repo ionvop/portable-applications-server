@@ -6,7 +6,6 @@ import {
   GamepadIcon,
   LibraryIcon,
   MoonIcon,
-  SearchIcon,
   SettingsIcon,
   SunIcon,
 } from "../icons"
@@ -16,11 +15,8 @@ interface NavBarProps {
   connection: ConnectionState
   serverUrl: string
   theme: ThemeId
-  /** The Catalog's search text — the navbar box edits the same query. */
-  query: string
   onNavigate: (view: ViewId) => void
   onToggleTheme: () => void
-  onQueryChange: (query: string) => void
 }
 
 const navItems: { id: ViewId; label: string; icon: typeof CatalogIcon }[] = [
@@ -36,10 +32,8 @@ export function NavBar({
   connection,
   serverUrl,
   theme,
-  query,
   onNavigate,
   onToggleTheme,
-  onQueryChange,
 }: NavBarProps) {
   const status = describeConnection(connection)
 
@@ -84,17 +78,6 @@ export function NavBar({
         </ul>
 
         <div className="ml-auto flex items-center gap-2">
-          <label className="input input-sm hidden w-56 lg:flex">
-            <SearchIcon width={16} height={16} className="opacity-50" />
-            <input
-              type="search"
-              placeholder="Search apps…"
-              aria-label="Search apps"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-            />
-          </label>
-
           <div
             className="hidden items-center gap-2 rounded-field bg-base-100 px-3 py-1.5 xl:flex"
             title={status.detail}
@@ -115,12 +98,6 @@ export function NavBar({
             <SunIcon className="swap-off" width={18} height={18} />
             <MoonIcon className="swap-on" width={18} height={18} />
           </label>
-
-          <div className="avatar avatar-placeholder">
-            <div className="w-8 rounded-full bg-neutral text-neutral-content">
-              <span className="text-xs">PC</span>
-            </div>
-          </div>
         </div>
       </div>
 
