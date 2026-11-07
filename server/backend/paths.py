@@ -76,6 +76,11 @@ def web_dir() -> Path:
     return resource_root() / config.WEB_DIR_NAME
 
 
+def icon_path() -> Path:
+    """Window and executable icon bundled with the application."""
+    return resource_root() / config.RESOURCES_DIR_NAME / config.ICON_FILE_NAME
+
+
 def _ensure(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
