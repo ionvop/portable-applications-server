@@ -1,4 +1,4 @@
-"""Portable Applications Server — Python desktop backend.
+"""CHU2CORE — Python desktop backend.
 
 The package hosts the PyWebView desktop shell, the Flask API, the SQLite
 catalog and the ZIP distribution service. Every path is resolved relative to
