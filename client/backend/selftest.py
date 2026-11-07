@@ -1,6 +1,6 @@
 """Headless verification of a packaged (or source) build.
 
-``build.bat`` runs ``PortableApplicationsClient.exe --selftest`` after
+``build.bat`` runs ``CHU2PLAY.exe --selftest`` after
 PyInstaller finishes, and again from a copy of the release folder in ``%TEMP%``.
 That is the only way to prove the things Step 11 asks for from *inside* the
 frozen process:
