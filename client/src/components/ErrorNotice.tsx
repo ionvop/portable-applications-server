@@ -15,7 +15,7 @@ interface ErrorNoticeProps {
  */
 export function ErrorNotice({ title, message, onRetry, className = "" }: ErrorNoticeProps) {
   return (
-    <div className={`card border border-error/40 bg-base-200 ${className}`}>
+    <div className={`card border border-error/40 surface ${className}`}>
       <div className="card-body items-center gap-2 py-10 text-center">
         <p className="text-sm font-medium">{title}</p>
         <p className="max-w-md text-xs text-base-content/60">{message}</p>
