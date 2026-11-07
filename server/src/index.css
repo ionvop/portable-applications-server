@@ -22,10 +22,31 @@ body,
  */
 :root {
   --app-backdrop-opacity: 0.15;
+  /* Foreground panels are translucent so the artwork shows through them. */
+  --surface-opacity: 70%;
+  --surface-blur: 6px;
 }
 
 [data-theme="light"] {
   --app-backdrop-opacity: 0.2;
+}
+
+/*
+ * Translucent content panel.
+ *
+ * Replaces an opaque `bg-base-200` on cards, stats blocks and table wrappers.
+ * The colour is mixed against `transparent` rather than using a `/70` opacity
+ * modifier so the same rule works for both themes, and the small backdrop blur
+ * keeps text crisp where the artwork is busy.
+ */
+@utility surface {
+  background-color: color-mix(
+    in oklab,
+    var(--color-base-200) var(--surface-opacity),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  backdrop-filter: blur(var(--surface-blur));
 }
 
 body::before {
