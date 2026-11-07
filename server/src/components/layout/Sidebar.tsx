@@ -3,7 +3,6 @@ import {
   CatalogIcon,
   DashboardIcon,
   FilesIcon,
-  ServerIcon,
   TransfersIcon,
 } from "../icons"
 
@@ -23,12 +22,10 @@ export function Sidebar({ activeView, onNavigate }: SidebarProps) {
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r border-base-300 bg-base-200">
       <div className="flex items-center gap-3 px-5 py-5">
-        <div className="grid size-10 place-items-center rounded-box bg-primary text-primary-content">
-          <ServerIcon width={22} height={22} />
-        </div>
+        <img src="/logo.svg" alt="" className="size-10 shrink-0" />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">
-            Portable Apps
+            CHU2CORE
           </p>
           <p className="truncate text-xs text-base-content/60">Server console</p>
         </div>
