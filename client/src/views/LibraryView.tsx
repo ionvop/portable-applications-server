@@ -91,7 +91,7 @@ export function LibraryView({
 
   if (installs.length === 0) {
     return (
-      <div className="card border border-dashed border-base-300 bg-base-200">
+      <div className="card border border-dashed border-base-300 surface">
         <div className="card-body items-center gap-3 py-20 text-center">
           <LibraryIcon width={32} height={32} className="opacity-40" />
           <p className="text-sm font-medium">Nothing installed yet</p>
@@ -119,7 +119,7 @@ export function LibraryView({
         </p>
       )}
 
-      <div className="stats stats-horizontal w-full border border-base-300 bg-base-200">
+      <div className="stats stats-horizontal w-full border border-base-300 surface">
         <div className="stat">
           <div className="stat-title text-xs">Installed</div>
           <div className="stat-value text-2xl">{installs.length}</div>
@@ -139,7 +139,7 @@ export function LibraryView({
         </div>
       </div>
 
-      <div className="card border border-base-300 bg-base-200">
+      <div className="card border border-base-300 surface">
         <div className="card-body gap-0 p-0">
           <div className="flex items-center justify-between gap-3 border-b border-base-300 px-4 py-3">
             <h2 className="card-title text-sm">Your library</h2>
